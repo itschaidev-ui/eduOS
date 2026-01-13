@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Extension files (only on extension branch)
+chaimode-extension/
