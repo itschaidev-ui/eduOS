@@ -1,29 +1,43 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { ContentMode, LessonContent, MentorPersona, CurriculumOption, KnowledgeNode, RaidData, ChaosBattle } from "../types";
 
-// Helper to get API Key from various environment variable formats (Vite, CRA, Standard)
-const getApiKey = () => {
+// Helper to get API Keys from environment variables
+const getApiKeys = () => {
     // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
         // @ts-ignore
-        return import.meta.env.VITE_API_KEY;
+        const envKeys = import.meta.env.VITE_GEMINI_API_KEYS;
+        if (envKeys && typeof envKeys === 'string') {
+            // Split comma-separated keys and filter out empty strings
+            const keys = envKeys.split(',').map(k => k.trim()).filter(k => k.length > 0);
+            if (keys.length > 0) {
+                return keys;
+            }
+        }
     }
-    // Fallback keys provided by user
-    const keys = [
-        "AIzaSyCfQOG3Y_sjnpjaUflKhYdB7F-N_V-32I8",
-        "AIzaSyB_gsYSWHHeIl2s1AwsG8Sj0FZrt92gIJI"
-    ];
-    return keys[Math.floor(Math.random() * keys.length)];
+    // No keys found - throw error in production, warn in development
+    if (import.meta.env?.MODE === 'production') {
+        throw new Error('VITE_GEMINI_API_KEYS environment variable is required in production');
+    }
+    console.warn('⚠️ VITE_GEMINI_API_KEYS not found. Please set it in your .env file.');
+    return [];
 };
 
-const apiKey = getApiKey();
-// We will create specific clients for cross-checking
-const keys = [
-    "AIzaSyCfQOG3Y_sjnpjaUflKhYdB7F-N_V-32I8",
-    "AIzaSyB_gsYSWHHeIl2s1AwsG8Sj0FZrt92gIJI"
-];
+const keys = getApiKeys();
+if (keys.length === 0) {
+    console.error('❌ No Gemini API keys found. Please add VITE_GEMINI_API_KEYS to your .env file.');
+}
+
 const clients = keys.map(k => new GoogleGenAI({ apiKey: k }));
-const ai = clients[0]; // Default client
+const ai = clients[0] || null; // Default client (null if no keys)
+
+// Helper to ensure we have a valid client
+const ensureClient = () => {
+    if (!ai || clients.length === 0) {
+        throw new Error('Gemini API keys not configured. Please set VITE_GEMINI_API_KEYS in your .env file.');
+    }
+    return ai;
+};
 
 // --- HELPERS ---
 
@@ -157,6 +171,7 @@ async function generateWithCrossCheck<T>(
         console.error("Cross-check failed, falling back to single stream:", error);
         // Fallback to single stream immediately if fancy logic fails
         try {
+             if (clients.length === 0 || !clients[0]) throw new Error('API keys not configured');
              const fallbackClient = clients[0];
              const fallbackResult = await fallbackClient.models.generateContent({
                 model: "gemini-2.0-flash-exp",
@@ -404,6 +419,7 @@ export const generateCurriculumOptions = async (goal: string, timeConstraints: s
             if (result) return result;
 
             // Fallback to single stream if cross-check failed or returned null internally
+            if (!ai) throw new Error('API keys not configured');
             const singleResult = await ai.models.generateContent({
                 model: "gemini-2.0-flash-exp",
                 config: {
@@ -433,6 +449,7 @@ export const generateKnowledgeGraph = async (curriculumTitle: string, userGoal: 
     // 1. Try API Generation with Retry
     try {
         return await callWithRetry(async () => {
+            if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
                 model: "gemini-2.0-flash-exp",
                 config: {
@@ -482,6 +499,7 @@ export const generateExpansionGraph = async (curriculumTitle: string, existingNo
         const contextLabels = leafNodes.map(n => n.label).join(", ");
 
         return await callWithRetry(async () => {
+            if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
                 model: "gemini-2.0-flash-exp",
                 config: {
@@ -521,6 +539,7 @@ export const generateExpansionGraph = async (curriculumTitle: string, existingNo
 export const generateChaosBattle = async (curriculumTitle: string): Promise<ChaosBattle | null> => {
     try {
         return await callWithRetry(async () => {
+            if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
                 model: "gemini-2.0-flash-exp",
                 config: {
@@ -580,6 +599,7 @@ export const generateLesson = async (topic: string, context: string, mode: Conte
 
         if (result) return result;
 
+        if (!ai) throw new Error('API keys not configured');
         const singleResult = await ai.models.generateContent({
           model: "gemini-2.0-flash-exp",
           config: {
@@ -647,6 +667,7 @@ export const generateLessonChallenge = async (topic: string, context: string, ar
         // Ideally we would define a union schema, but for now we trust the generic object structure
         
         const result = await callWithRetry(async () => {
+            if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
                 model: "gemini-2.0-flash-exp",
                 config: {
@@ -717,6 +738,7 @@ export const generateLessonChallenge = async (topic: string, context: string, ar
                     if (needsRepair && repairPrompt) {
                          console.warn(`Repairing Widget Config for ${forcedType}...`);
                          try {
+                             if (!ai) throw new Error('API keys not configured');
                              const repairResult = await ai.models.generateContent({
                                 model: "gemini-2.0-flash-exp",
                                 config: { responseMimeType: "application/json" },
@@ -765,6 +787,7 @@ export const generateLessonChallenge = async (topic: string, context: string, ar
 export const generateRaid = async (subject: string): Promise<RaidData | null> => {
     try {
         return await callWithRetry(async () => {
+            if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
                 model: "gemini-2.0-flash-exp",
                 config: {
@@ -817,6 +840,7 @@ export const chatWithMentor = async (
 
 export const generateRabbitHole = async (currentTopic: string): Promise<string> => {
     try {
+        if (!ai) throw new Error('API keys not configured');
         const result = await ai.models.generateContent({
             model: "gemini-2.0-flash-exp",
             contents: `Tell me a mind-blowing secret fact about ${currentTopic} (under 100 words).`

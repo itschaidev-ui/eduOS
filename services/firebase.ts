@@ -8,15 +8,36 @@ import {
   persistentMultipleTabManager 
 } from "firebase/firestore";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDhhfMzZwJIzXv5HUBEhWTJlzKSTZ48Tic",
-  authDomain: "eduos-abcae.firebaseapp.com",
-  projectId: "eduos-abcae",
-  storageBucket: "eduos-abcae.firebasestorage.app",
-  messagingSenderId: "975584235408",
-  appId: "1:975584235408:web:68263c2aa168de4e09ed15",
-  measurementId: "G-DBPK9SC3Y3"
+// Get Firebase config from environment variables
+// @ts-ignore
+const getFirebaseConfig = () => {
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    // @ts-ignore
+    const env = import.meta.env;
+    return {
+      apiKey: env.VITE_FIREBASE_API_KEY || "",
+      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "",
+      projectId: env.VITE_FIREBASE_PROJECT_ID || "",
+      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "",
+      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+      appId: env.VITE_FIREBASE_APP_ID || "",
+      measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || ""
+    };
+  }
+  // Fallback (should not be used in production)
+  return {
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: "",
+    measurementId: ""
+  };
 };
+
+const firebaseConfig = getFirebaseConfig();
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);

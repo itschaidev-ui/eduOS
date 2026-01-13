@@ -25,3 +25,8 @@ dist-ssr
 
 # Extension files (only on extension branch)
 chaimode-extension/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
