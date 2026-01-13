@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChaiDev Quick Access</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <div class="logo-icon">⚡</div>
+        <h1>ChaiDev</h1>
+      </div>
+      <p class="tagline">Intelligent Software Solutions</p>
+    </header>
+
+    <div class="projects">
+      <!-- eduOS -->
+      <div class="project-card" data-project="eduos">
+        <div class="project-icon">🧠</div>
+        <div class="project-info">
+          <h3>eduOS</h3>
+          <p>Knowledge Graph Learning</p>
+        </div>
+        <button class="open-btn" data-url="https://eduos.chaimode.dev">
+          <span>Open</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M6 3L11 8L6 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Lunchbox AI -->
+      <div class="project-card" data-project="lunchbox">
+        <div class="project-icon">📦</div>
+        <div class="project-info">
+          <h3>Lunchbox AI</h3>
+          <p>AI-Powered Productivity</p>
+        </div>
+        <button class="open-btn" data-url="https://lunchbox.chaimode.dev">
+          <span>Open</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M6 3L11 8L6 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- chaimode -->
+      <div class="project-card" data-project="chaimode">
+        <div class="project-icon">🍽️</div>
+        <div class="project-info">
+          <h3>chaimode</h3>
+          <p>Nutrition & Recipes</p>
+        </div>
+        <button class="open-btn" data-url="https://chaimode.dev">
+          <span>Open</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M6 3L11 8L6 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="quick-actions">
+      <h3>Quick Actions</h3>
+      <div class="actions-grid">
+        <button class="action-btn" id="open-all">
+          <span>📂</span>
+          <span>Open All</span>
+        </button>
+        <button class="action-btn" id="new-tab">
+          <span>➕</span>
+          <span>New Tab</span>
+        </button>
+      </div>
+    </div>
+
+    <footer>
+      <a href="https://www.chaimode.dev" target="_blank" class="footer-link">About ChaiDev</a>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
