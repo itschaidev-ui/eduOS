@@ -1,20 +1,59 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# eduOS Repository
 
-# Run and deploy your AI Studio app
+This repository contains multiple ChaiDev projects organized by branches.
 
-This contains everything you need to run your app locally.
+## Branch Structure
 
-View your app in AI Studio: https://ai.studio/apps/drive/12SSOFydj16VmzDtcVTiChxSrjJkUIop5
+### `main` branch
+**eduOS Website** - The main learning platform
+- Full React/TypeScript application
+- Deployed to Cloudflare Pages at `eduos.chaimode.dev`
+- Firebase integration for authentication and data
+- AI-powered lesson generation
 
-## Run Locally
+### `extension` branch
+**ChaiDev Quick Access Chrome Extension**
+- Chrome extension for quick access to all ChaiDev products
+- One-click access to eduOS, Lunchbox AI, and chaimode
+- Keyboard shortcuts for instant access
 
-**Prerequisites:**  Node.js
+## Getting Started
 
+### For eduOS Website (main branch)
+```bash
+git checkout main
+npm install
+npm run dev
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### For Chrome Extension (extension branch)
+```bash
+git checkout extension
+# Follow instructions in chaimode-extension/INSTALL.md
+```
+
+## Deployment
+
+### eduOS to Cloudflare Pages
+- Connected to Cloudflare Pages
+- Auto-deploys on push to `main` branch
+- Custom domain: `eduos.chaimode.dev`
+
+### Extension
+- Load unpacked in Chrome: `chrome://extensions/`
+- See `chaimode-extension/INSTALL.md` for details
+
+## Projects
+
+- **eduOS**: AI-powered spatial learning platform
+- **Lunchbox AI**: AI-powered productivity platform
+- **chaimode**: Nutrition and recipe finding with AI
+
+## Tech Stack
+
+- React + TypeScript
+- Vite
+- Firebase (Auth + Firestore)
+- Google Gemini API
+- Framer Motion
+- Tailwind CSS
