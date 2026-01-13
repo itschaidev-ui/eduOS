@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
     // Safely load env, fallback to empty object if files don't exist
     let env = {};
     try {
-        env = loadEnv(mode, '.', '');
+        env = loadEnv(mode, '.', '', { ignore: ['.env.local'] });
     } catch (e) {
         console.warn('Could not load env files, using defaults');
     }
