@@ -1,6 +1,0 @@
-# Icons (if you want to keep them private)
-# icons/*.png
-
-# Development files
-.DS_Store
-*.log
