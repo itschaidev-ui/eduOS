@@ -16,12 +16,20 @@
    - **Framework preset**: `Vite`
    - **Build command**: `npm run build`
    - **Build output directory**: `dist`
+   - **Deploy command**: **LEAVE EMPTY** (Cloudflare auto-deploys `dist` folder)
+     - If field is required, use: `echo "Deployment handled by Cloudflare"`
    - **Root directory**: `/` (leave empty)
    - **Node version**: `18` or `20`
+   
+   **Important**: For Git-connected Pages projects, you do NOT need a deploy command. Cloudflare automatically deploys the output directory after the build completes.
 
-4. **Environment Variables** (if needed)
+4. **Environment Variables** (CRITICAL)
    - Go to **Settings** → **Environment variables**
-   - Add `GEMINI_API_KEY` if you use it (optional, can be set in code)
+   - You MUST add your variables with the `VITE_` prefix:
+     - `VITE_GEMINI_API_KEYS`
+     - `VITE_FIREBASE_API_KEY`
+     - ...and all others from your `.env` file
+   - If you skip this, the app will not have API access!
 
 5. **Custom Domain**
    - Go to **Custom domains** in your Pages project
@@ -64,8 +72,11 @@ If not:
 
 ### Environment Variables
 
-For production, set these in Cloudflare Pages:
-- `GEMINI_API_KEY` (if using environment variables)
+For production, set these in Cloudflare Pages (Settings -> Environment variables):
+- `VITE_GEMINI_API_KEYS`
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- ...etc (all variables from .env)
 
 ### Build Commands Reference
 

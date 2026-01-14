@@ -151,6 +151,13 @@ const LoadingScreen = ({ message = "Establishing Neural Link...", longLoad = fal
 );
 
 function App() {
+  // Check for missing environment variables
+  // @ts-ignore
+  const firebaseApiKey = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_FIREBASE_API_KEY : '';
+  // @ts-ignore
+  const geminiKeys = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_GEMINI_API_KEYS : '';
+  const hasEnvVars = firebaseApiKey && geminiKeys;
+
   const [user, setUser] = useState<User | null>(null);
   const [appState, setAppState] = useState<AppView>('landing');
   const [notification, setNotification] = useState<{message: string, type: 'info' | 'error' | 'success'} | null>(null);
@@ -987,6 +994,29 @@ function App() {
             onReset={() => { auth.signOut(); window.location.reload(); }} 
           />
       );
+  }
+
+  // Show error if environment variables are missing (development only)
+  if (!hasEnvVars && import.meta.env?.MODE === 'development') {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-black text-white flex-col gap-4 p-8">
+        <div className="w-16 h-16 bg-yellow-900/20 text-yellow-500 rounded-full flex items-center justify-center border border-yellow-500/50 mb-4">
+          <AlertCircle size={32} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight">Missing Environment Variables</h2>
+        <p className="text-zinc-400 text-center max-w-md">
+          The app requires environment variables to run. Please check your <code className="bg-zinc-900 px-2 py-1 rounded">.env</code> file.
+        </p>
+        <div className="mt-4 p-4 bg-zinc-900 rounded-lg text-left text-sm font-mono space-y-1">
+          <div>Required variables:</div>
+          <div className="text-zinc-500">• VITE_FIREBASE_API_KEY</div>
+          <div className="text-zinc-500">• VITE_GEMINI_API_KEYS</div>
+          <div className="text-zinc-500">• VITE_FIREBASE_AUTH_DOMAIN</div>
+          <div className="text-zinc-500">• ... (see ENV_SETUP.md)</div>
+        </div>
+        <p className="text-xs text-zinc-600 mt-4">Check the browser console for detailed errors.</p>
+      </div>
+    );
   }
 
   const currentRaidTeam = teams.find(t => t.id === currentRaidTeamId);

@@ -39,6 +39,14 @@ const getFirebaseConfig = () => {
 
 const firebaseConfig = getFirebaseConfig();
 
+// Validate Firebase config before initializing
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "") {
+  const errorMsg = "Firebase API key is missing. Please set VITE_FIREBASE_API_KEY in your .env file.";
+  console.error("❌", errorMsg);
+  console.error("📝 See ENV_SETUP.md for instructions.");
+  // Don't throw here - let it fail gracefully so the error boundary can catch it
+}
+
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
