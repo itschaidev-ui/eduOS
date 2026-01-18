@@ -24,6 +24,9 @@ const generateDailyQuests = (): Quest[] => [
 
 export const useDataPersistence = (user: User | null) => {
   const [loadingData, setLoadingData] = useState(false);
+  // Be explicit about when we have *finished at least one* attempt to load user data.
+  // This prevents route guards from deciding "no data" during the first render frame after auth.
+  const [hasLoadedUserData, setHasLoadedUserData] = useState(false);
   const [userState, setUserState] = useState<UserState>(INITIAL_USER_STATE);
   const [nodes, setNodes] = useState<KnowledgeNode[]>([]);
   const [curriculumTitle, setCurriculumTitle] = useState<string>('');
@@ -41,11 +44,13 @@ export const useDataPersistence = (user: User | null) => {
 
     if (!user) {
         setLoadingData(false);
+        setHasLoadedUserData(false);
         return;
     }
 
     const loadUserData = async () => {
         setLoadingData(true);
+        setHasLoadedUserData(false);
 
         // --- OFFLINE GUEST MODE ---
         if (isLocalGuest(user)) {
@@ -83,6 +88,7 @@ export const useDataPersistence = (user: User | null) => {
             }
 
             if (isMounted) setLoadingData(false);
+            if (isMounted) setHasLoadedUserData(true);
             return;
         }
 
@@ -97,7 +103,15 @@ export const useDataPersistence = (user: User | null) => {
             try {
                 userSnap = await Promise.race([getDoc(userRef), timeout]);
             } catch (e) {
-                console.warn("User fetch timed out or failed, treating as potential connection issue (Offline Mode Active).");
+                // Avoid spamming the console; this can happen if Firestore config/rules block reads or network is flaky.
+                // We still fall back to "offline mode" behavior.
+                if (!(window as any).__eduosWarnedOfflineMode) {
+                    (window as any).__eduosWarnedOfflineMode = true;
+                    console.warn(
+                        "User fetch timed out or failed, treating as potential connection issue (Offline Mode Active).",
+                        e
+                    );
+                }
             }
 
             if (!isMounted) return;
@@ -120,7 +134,20 @@ export const useDataPersistence = (user: User | null) => {
                 setUserState(loadedState);
                 setNodes(data.nodes || []);
                 setCurriculumTitle(data.curriculumTitle || '');
-            } 
+            } else if (!userSnap) {
+                // Firestore fetch failed; try local cache fallback.
+                try {
+                    const cached = localStorage.getItem(`eduos_user_${user.uid}`);
+                    if (cached) {
+                        const parsed = JSON.parse(cached);
+                        if (parsed.userState) setUserState(parsed.userState);
+                        if (parsed.nodes) setNodes(parsed.nodes);
+                        if (parsed.curriculumTitle) setCurriculumTitle(parsed.curriculumTitle);
+                    }
+                } catch (e) {
+                    console.warn("Failed to load local cache fallback", e);
+                }
+            }
 
             // Subscribe to Teams
             const q = query(collection(db, 'teams'), where('memberIds', 'array-contains', user.uid));
@@ -140,7 +167,10 @@ export const useDataPersistence = (user: User | null) => {
         } catch (error) {
             console.error("Error loading user data:", error);
         } finally {
-            if (isMounted) setLoadingData(false);
+            if (isMounted) {
+              setLoadingData(false);
+              setHasLoadedUserData(true);
+            }
         }
     };
 
@@ -219,6 +249,7 @@ export const useDataPersistence = (user: User | null) => {
 
   return {
       loadingData,
+      hasLoadedUserData,
       userState,
       setUserState,
       nodes,

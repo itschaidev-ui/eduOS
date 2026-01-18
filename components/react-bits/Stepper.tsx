@@ -243,7 +243,8 @@ function StepIndicator({ step, currentStep, onClickStep, disableStepIndicators }
 
 function StepConnector({ isComplete }: any) {
   const lineVariants = {
-    incomplete: { width: 0, backgroundColor: 'transparent' },
+    // Avoid animating from "transparent" (not animatable in Framer Motion)
+    incomplete: { width: 0, backgroundColor: 'rgba(34, 211, 238, 0)' },
     complete: { width: '100%', backgroundColor: '#22d3ee' }
   };
 

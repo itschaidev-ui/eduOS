@@ -26,10 +26,12 @@ const getApiKeys = () => {
 const keys = getApiKeys();
 if (keys.length === 0) {
     console.error('❌ No Gemini API keys found. Please add VITE_GEMINI_API_KEYS to your .env file.');
-}
+    }
 
 const clients = keys.map(k => new GoogleGenAI({ apiKey: k }));
 const ai = clients[0] || null; // Default client (null if no keys)
+
+export const isGeminiConfigured = () => clients.length > 0;
 
 // Helper to ensure we have a valid client
 const ensureClient = () => {
@@ -404,45 +406,37 @@ const raidSchema: Schema = {
 // --- GENERATORS ---
 
 export const generateCurriculumOptions = async (goal: string, timeConstraints: string): Promise<CurriculumOption[]> => {
-    try {
-        return await callWithRetry(async () => {
-            // Use Cross-Check for Curriculum Generation (Acceleration Plan)
-            const result = await generateWithCrossCheck<CurriculumOption[]>({
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: curriculumOptionsSchema,
-                    systemInstruction: "You are the Curriculum Architect. Generate 4 distinct learning paths."
-                },
-                contents: `User Goal: "${goal}". Time: ${timeConstraints}.`,
-            }, "Merge the options to create 4 highly distinct, optimized paths. Ensure variety in pacing and depth.", curriculumOptionsSchema);
+    return await callWithRetry(async () => {
+        // Use Cross-Check for Curriculum Generation (Acceleration Plan)
+        const result = await generateWithCrossCheck<CurriculumOption[]>({
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: curriculumOptionsSchema,
+                systemInstruction: "You are the Curriculum Architect. Generate 4 distinct learning paths."
+            },
+            contents: `User Goal: "${goal}". Time: ${timeConstraints}.`,
+        }, "Merge the options to create 4 highly distinct, optimized paths. Ensure variety in pacing and depth.", curriculumOptionsSchema);
 
-            if (result) return result;
+        if (result) return result;
 
-            // Fallback to single stream if cross-check failed or returned null internally
-            if (!ai) throw new Error('API keys not configured');
-            const singleResult = await ai.models.generateContent({
-                model: "gemini-2.0-flash-exp",
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: curriculumOptionsSchema,
-                    systemInstruction: "You are the Curriculum Architect. Generate 4 distinct learning paths."
-                },
-                contents: `User Goal: "${goal}". Time: ${timeConstraints}.`,
-            });
-    
-            if (singleResult.text) {
-                const parsed = cleanAndParseJSON<CurriculumOption[]>(singleResult.text);
-                return parsed || [];
-            }
-            throw new Error("Empty response");
+        // Fallback to single stream if cross-check returned null internally (still REAL Gemini).
+        const client = ensureClient();
+        const singleResult = await client.models.generateContent({
+            model: "gemini-2.0-flash-exp",
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: curriculumOptionsSchema,
+                systemInstruction: "You are the Curriculum Architect. Generate 4 distinct learning paths."
+            },
+            contents: `User Goal: "${goal}". Time: ${timeConstraints}.`,
         });
-    } catch (error) {
-        console.error("Gemini Curriculum Gen Error:", error);
-        return [
-            { id: 'c1', title: 'Foundations', description: 'Academic approach.', estimatedWeeks: 8, tags: ['Academic', 'Slow'] },
-            { id: 'c2', title: 'Quick Start', description: 'Practical basics.', estimatedWeeks: 4, tags: ['Practical', 'Fast'] }
-        ];
-    }
+
+        if (singleResult.text) {
+            const parsed = cleanAndParseJSON<CurriculumOption[]>(singleResult.text);
+            if (parsed) return parsed;
+        }
+        throw new Error("Gemini returned empty/invalid curriculum options.");
+    });
 };
 
 export const generateKnowledgeGraph = async (curriculumTitle: string, userGoal: string): Promise<KnowledgeNode[]> => {
@@ -815,27 +809,60 @@ export const chatWithMentor = async (
   persona: MentorPersona,
   modelId: string = "gemini-2.0-flash-exp"
 ): Promise<string> => {
-  try {
-    let systemInstruction = "You are a helpful AI tutor. Keep responses concise.";
-    if (persona === MentorPersona.LIBRARIAN) systemInstruction = "You are The Librarian. Precise, neutral, factual.";
-    if (persona === MentorPersona.COACH) systemInstruction = "You are The Coach. High energy, motivational, firm.";
-    if (persona === MentorPersona.DEVIL) systemInstruction = "You are The Devil's Advocate. Skeptical, challenging.";
+  let systemInstruction = "You are a helpful AI tutor. Keep responses concise.";
+  if (persona === MentorPersona.LIBRARIAN) systemInstruction = "You are The Librarian. Precise, neutral, factual.";
+  if (persona === MentorPersona.COACH) systemInstruction = "You are The Coach. High energy, motivational, firm.";
+  if (persona === MentorPersona.DEVIL) systemInstruction = "You are The Devil's Advocate. Skeptical, challenging.";
 
-    // Use random client for chat to distribute load
-    const randomClient = clients[Math.floor(Math.random() * clients.length)];
-
-    const chat = randomClient.chats.create({
-      model: modelId,
-      config: { systemInstruction },
-      history: history as any,
-    });
-
-    const result = await chat.sendMessage({ message });
-    return result.text || "";
-  } catch (error) {
-    console.error("Gemini Chat Error:", error);
-    return "The neural link is experiencing static (Rate Limited). Please try again in a moment.";
+  if (clients.length === 0) {
+    throw new Error('Gemini API keys not configured. Please set VITE_GEMINI_API_KEYS in your .env file.');
   }
+
+  // Use random client for chat to distribute load
+  const randomClient = clients[Math.floor(Math.random() * clients.length)];
+
+  const chat = randomClient.chats.create({
+    model: modelId,
+    config: { systemInstruction },
+    history: history as any,
+  });
+
+  const result = await chat.sendMessage({ message });
+  return result.text || "";
+};
+
+export const chatWithOnboardingAI = async (
+  history: { role: string; parts: { text: string }[] }[],
+  message: string,
+  context: { currentGoal?: string }
+): Promise<string> => {
+  if (clients.length === 0) {
+    throw new Error('Gemini API keys not configured. Please set VITE_GEMINI_API_KEYS in your .env file.');
+  }
+
+  const systemInstruction =
+    "You are eduOS Onboarding. Your job is to help the user define a clear learning mission.\n" +
+    "OUTPUT FORMAT (required):\n" +
+    "1) First line MUST be: \"MISSION: <one-sentence mission statement>\"\n" +
+    "2) Then 1 short paragraph responding normally.\n" +
+    "RULES:\n" +
+    "- Ask ONE clarifying question at a time.\n" +
+    "- If the user is vague, give a short example and ask them to restate.\n" +
+    "- Keep replies under 90 words.\n" +
+    "- Do not mention policies or internal implementation.\n";
+
+  const randomClient = clients[Math.floor(Math.random() * clients.length)];
+  const chat = randomClient.chats.create({
+    model: "gemini-2.0-flash-exp",
+    config: { systemInstruction },
+    history: history as any,
+  });
+
+  const contextualMessage =
+    (context.currentGoal ? `Current mission draft:\n${context.currentGoal}\n\n` : "") + message;
+
+  const result = await chat.sendMessage({ message: contextualMessage });
+  return result.text || "";
 };
 
 export const generateRabbitHole = async (currentTopic: string): Promise<string> => {

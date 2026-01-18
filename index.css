@@ -1,4 +1,8 @@
-/* Base styles - minimal, most styling is in Tailwind */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App base */
 body {
   margin: 0;
   padding: 0;

@@ -105,7 +105,23 @@ const LandingPage: React.FC<Props> = ({ onStart, onGuest }) => {
                whileHover={{ scale: 1.02 }}
                whileTap={{ scale: 0.98 }}
                transition={{ delay: 1, duration: 0.5 }}
-               onClick={onStart}
+               onClick={(e) => {
+                 console.log('🖱️ [LandingPage] Button clicked!');
+                 console.log('   Event:', e);
+                 console.log('   onStart function:', onStart);
+                 // Don't prevent default - let the redirect happen naturally
+                 try {
+                   if (typeof onStart === 'function') {
+                     console.log('   Calling onStart...');
+                     onStart();
+                     console.log('   onStart called successfully');
+                   } else {
+                     console.error('   ❌ onStart is not a function!', typeof onStart);
+                   }
+                 } catch (error) {
+                   console.error('❌ [LandingPage] Error in onStart:', error);
+                 }
+               }}
                className="mt-8 sm:mt-16 px-6 sm:px-10 py-3 sm:py-4 bg-white text-black font-bold rounded-full text-xs sm:text-sm uppercase tracking-widest hover:bg-zinc-200 transition-colors z-20 touch-manipulation"
             >
                 Initialize Sequence

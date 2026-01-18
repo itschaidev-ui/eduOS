@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { MentorPersona, ContentMode } from '../types';
 import { chatWithMentor } from '../services/gemini';
-import { Send, Book, Zap, AlertTriangle, User, Bot, Mic, MicOff } from 'lucide-react';
+import { Send, User, Bot, Mic, MicOff } from 'lucide-react';
+import { CompanionAvatar } from './CompanionAvatar';
 
 interface Props {
   className?: string;
@@ -19,6 +20,7 @@ const MODELS = [
 
 const MentorChat: React.FC<Props> = ({ className, mode }) => {
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
+  const [companionName, setCompanionName] = useState<string>(() => localStorage.getItem('eduos:companionName') || 'Nova');
   
   const persona = useMemo(() => {
       switch (mode) {
@@ -87,6 +89,10 @@ const MentorChat: React.FC<Props> = ({ className, mode }) => {
       }
   };
 
+  useEffect(() => {
+    localStorage.setItem('eduos:companionName', companionName);
+  }, [companionName]);
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
@@ -101,10 +107,19 @@ const MentorChat: React.FC<Props> = ({ className, mode }) => {
         parts: [{ text: m.text }]
     }));
 
-    const response = await chatWithMentor(history, userMsg, persona, selectedModel);
-    
-    setMessages(prev => [...prev, { role: 'model', text: response }]);
-    setLoading(false);
+    try {
+      const response = await chatWithMentor(history, userMsg, persona, selectedModel);
+      setMessages(prev => [...prev, { role: 'model', text: response }]);
+
+    } catch (e: any) {
+      console.error('[MentorChat] Gemini chat failed:', e);
+      setMessages(prev => [
+        ...prev,
+        { role: 'model', text: `Gemini error: ${e?.message || String(e)}` }
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -112,9 +127,12 @@ const MentorChat: React.FC<Props> = ({ className, mode }) => {
       {/* Header */}
       <div className="p-4 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center">
-                <Bot size={16} className="text-zinc-400" />
-            </div>
+            <CompanionAvatar
+              size={32}
+              alt={`${companionName} (companion)`}
+              className="shadow-lg"
+              objectPosition="center 12%"
+            />
             <div>
                 <select 
                     value={selectedModel}
@@ -127,15 +145,30 @@ const MentorChat: React.FC<Props> = ({ className, mode }) => {
                         </option>
                     ))}
                 </select>
-                <div className="text-[8px] font-mono text-zinc-500">Latency: Low</div>
+                <div className="text-[8px] font-mono text-zinc-500">{companionName}</div>
             </div>
         </div>
-        <div className={`text-[9px] font-bold px-2 py-1 rounded border ${
-            mode === 'SOCRATIC' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
-            mode === 'PRACTICAL' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-            'bg-zinc-800 border-zinc-700 text-zinc-400'
-        }`}>
-            {mode}
+        <div className="flex items-center gap-2">
+          <select
+            value={companionName}
+            onChange={(e) => setCompanionName(e.target.value)}
+            className="bg-transparent text-[10px] font-bold text-zinc-400 uppercase tracking-wider focus:outline-none cursor-pointer hover:text-white transition-colors"
+            title="Companion Name"
+          >
+            <option value="Nova" className="bg-zinc-900">Nova</option>
+            <option value="Atlas" className="bg-zinc-900">Atlas</option>
+            <option value="Echo" className="bg-zinc-900">Echo</option>
+            <option value="Iris" className="bg-zinc-900">Iris</option>
+            <option value="Kairo" className="bg-zinc-900">Kairo</option>
+          </select>
+
+          <div className={`text-[9px] font-bold px-2 py-1 rounded border ${
+              mode === 'SOCRATIC' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
+              mode === 'PRACTICAL' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+              'bg-zinc-800 border-zinc-700 text-zinc-400'
+          }`}>
+              {mode}
+          </div>
         </div>
       </div>
 
