@@ -1,6 +1,15 @@
 
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInAnonymously } from "firebase/auth";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signInAnonymously,
+  setPersistence,
+  browserLocalPersistence,
+} from "firebase/auth";
 import { 
   getFirestore, 
   initializeFirestore, 
@@ -8,18 +17,52 @@ import {
   persistentMultipleTabManager 
 } from "firebase/firestore";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDhhfMzZwJIzXv5HUBEhWTJlzKSTZ48Tic",
-  authDomain: "eduos-abcae.firebaseapp.com",
-  projectId: "eduos-abcae",
-  storageBucket: "eduos-abcae.firebasestorage.app",
-  messagingSenderId: "975584235408",
-  appId: "1:975584235408:web:68263c2aa168de4e09ed15",
-  measurementId: "G-DBPK9SC3Y3"
+// Get Firebase config from environment variables
+// @ts-ignore
+const getFirebaseConfig = () => {
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    // @ts-ignore
+    const env = import.meta.env;
+    const inferredProjectId =
+      (env.VITE_FIREBASE_AUTH_DOMAIN && String(env.VITE_FIREBASE_AUTH_DOMAIN).split('.')[0]) || "";
+
+    return {
+      apiKey: env.VITE_FIREBASE_API_KEY || "",
+      authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "",
+      // projectId is required for Firestore. Infer from authDomain if missing.
+      projectId: env.VITE_FIREBASE_PROJECT_ID || inferredProjectId,
+      storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "",
+      messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+      appId: env.VITE_FIREBASE_APP_ID || "",
+      measurementId: env.VITE_FIREBASE_MEASUREMENT_ID || ""
+    };
+  }
+  return {
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: "",
+    measurementId: ""
+  };
 };
+
+const firebaseConfig = getFirebaseConfig();
+
+// Validate Firebase config before initializing
+if (!firebaseConfig.apiKey) {
+  console.error("❌ Firebase API key missing. Set VITE_FIREBASE_API_KEY in your .env.");
+}
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Ensure auth persists across reloads
+setPersistence(auth, browserLocalPersistence).catch((e) => {
+  console.warn("Auth persistence setup failed; continuing with default persistence.", e);
+});
 
 // Initialize Firestore with robust persistence settings
 // This prevents "client offline" errors by allowing the app to read from IDB while connecting
@@ -42,11 +85,17 @@ const googleProvider = new GoogleAuthProvider();
 
 export const signInWithGoogle = async () => {
   try {
-    // Use redirect-based auth to avoid COOP (Cross-Origin-Opener-Policy) issues
-    // Redirect is more reliable and doesn't have popup closing problems
+    const isLocalhost =
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    // Local dev: popup (more reliable)
+    if (isLocalhost) {
+      const result = await signInWithPopup(auth, googleProvider);
+      return result.user;
+    }
+
+    // Production: redirect to avoid popup COOP issues
     await signInWithRedirect(auth, googleProvider);
-    // Return null - the redirect will happen and user will come back
-    // The redirect result will be handled in App.tsx on mount
     return null;
   } catch (error) {
     console.error("Error signing in with Google", error);

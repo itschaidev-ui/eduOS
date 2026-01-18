@@ -1,29 +1,31 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { ContentMode, LessonContent, MentorPersona, CurriculumOption, KnowledgeNode, RaidData, ChaosBattle } from "../types";
 
-// Helper to get API Key from various environment variable formats (Vite, CRA, Standard)
-const getApiKey = () => {
+// Helper to get API Keys from environment variables
+const getApiKeys = () => {
     // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
         // @ts-ignore
-        return import.meta.env.VITE_API_KEY;
+        const envKeys = import.meta.env.VITE_GEMINI_API_KEYS;
+        if (envKeys && typeof envKeys === 'string') {
+            const keys = envKeys.split(',').map(k => k.trim()).filter(k => k.length > 0);
+            if (keys.length > 0) return keys;
+        }
     }
-    // Fallback keys provided by user
-    const keys = [
-        "AIzaSyCfQOG3Y_sjnpjaUflKhYdB7F-N_V-32I8",
-        "AIzaSyB_gsYSWHHeIl2s1AwsG8Sj0FZrt92gIJI"
-    ];
-    return keys[Math.floor(Math.random() * keys.length)];
+    if (import.meta.env?.MODE === 'production') {
+        throw new Error('VITE_GEMINI_API_KEYS environment variable is required in production');
+    }
+    console.warn('⚠️ VITE_GEMINI_API_KEYS not found. Please set it in your .env file.');
+    return [];
 };
 
-const apiKey = getApiKey();
-// We will create specific clients for cross-checking
-const keys = [
-    "AIzaSyCfQOG3Y_sjnpjaUflKhYdB7F-N_V-32I8",
-    "AIzaSyB_gsYSWHHeIl2s1AwsG8Sj0FZrt92gIJI"
-];
+const keys = getApiKeys();
+if (keys.length === 0) {
+    console.error('❌ No Gemini API keys found. Please add VITE_GEMINI_API_KEYS to your .env file.');
+}
+
 const clients = keys.map(k => new GoogleGenAI({ apiKey: k }));
-const ai = clients[0]; // Default client
+const ai = clients[0] || null; // Default client (null if no keys)
 
 // --- HELPERS ---
 
