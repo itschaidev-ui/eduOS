@@ -7,6 +7,7 @@ import SplitText from './react-bits/SplitText';
 import ColorBends from './react-bits/ColorBends';
 import BounceCards from './react-bits/BounceCards';
 import ChromaGrid from './react-bits/ChromaGrid';
+import { SparkleButton } from '@chaidev/ui';
 
 interface Props {
   onStart: () => void;
@@ -360,8 +361,12 @@ const LandingPage: React.FC<Props> = ({ onStart, onGuest }) => {
                       <a href="#" className="text-zinc-500 hover:text-white transition-colors">GitHub</a>
                       <a href="#" className="text-zinc-500 hover:text-white transition-colors">Discord</a>
                   </AnimatedList>
-                  <div className="text-zinc-700 text-[10px] mt-8 font-mono">
-                      © 2024 EDUOS INC. // OPEN SOURCE
+                  <div className="text-zinc-700 text-[10px] mt-8 font-mono space-y-1">
+                      <div>© 2024 EDUOS INC. // OPEN SOURCE</div>
+                      <div className="text-zinc-600" title={typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : undefined}>
+                          v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'}
+                          {typeof __BUILD_TIME__ !== 'undefined' ? ` · ${__BUILD_TIME__.replace('T', ' ').slice(0, 19)} UTC` : ''}
+                      </div>
                   </div>
               </div>
           </div>
@@ -543,12 +548,13 @@ const InteractiveDemo = ({ onStart }: { onStart: () => void }) => {
                             ))}
                         </div>
 
-                        <button 
+                        <SparkleButton
+                            text="Begin Journey"
+                            size="md"
+                            hue={200}
                             onClick={onStart}
-                            className="mt-6 w-full py-3 bg-white text-black hover:bg-zinc-200 font-bold rounded-xl text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
-                        >
-                            <Play size={14} fill="currentColor" /> Begin Journey
-                            </button>
+                            className="mt-6 w-full !py-3 !text-xs !font-bold !uppercase !tracking-widest"
+                        />
                         </motion.div>
                     )}
                  </AnimatePresence>

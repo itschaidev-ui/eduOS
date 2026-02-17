@@ -23,6 +23,12 @@ export interface Quest {
   progress: number;
 }
 
+export interface AISoulProfile {
+  soulPrompt?: string; // Custom personality/communication style
+  memoryNotes?: string; // Long-term user preferences/tastes
+  helpStyle?: string; // e.g., concise vs detailed, examples-first
+}
+
 export interface UserState {
   uid: string;
   displayName: string | null;
@@ -33,6 +39,7 @@ export interface UserState {
   currentFocus: string | null; // ID of current node being studied
   quests?: Quest[]; // Daily quests
   lastQuestDate?: string; // Date string to check for resets
+  aiSoul?: AISoulProfile; // Custom AI personality and memory
 }
 
 export interface CurriculumOption {

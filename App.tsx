@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, ReactNode, Component, Suspense, lazy, useCallback } from 'react';
+import React, { useState, useEffect, useRef, ReactNode, Component, Suspense, lazy, useCallback, startTransition } from 'react';
 import { useNavigate, useLocation, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, onSnapshot, deleteDoc, addDoc, getDocs, orderBy } from 'firebase/firestore';
@@ -6,11 +6,9 @@ import { auth, db, signInWithGoogle, signInAsGuest, checkRedirectResult } from '
 import { useDataPersistence } from './hooks/useDataPersistence';
 import { ContentMode, KnowledgeNode, LessonContent, UserState, OnboardingData, CurriculumOption, CoopTeam, ContentReport, ChaosBattle, InteractiveWidget } from './types';
 import { generateLesson, generateRabbitHole, generateKnowledgeGraph, generateExpansionGraph, generateChaosBattle, generateLessonChallenge } from './services/gemini';
-import { Brain, Star, Clock, Trophy, RefreshCw, Play, Rabbit, Settings, Layers, Menu, X, Share2, Users, LogIn, LogOut, AlertCircle, Info, CheckCircle2, Loader2, Flag, ShieldAlert, LayoutDashboard, Globe, ExternalLink, Youtube, FileText, Gift, Skull, PlusCircle, Heart, ChevronRight, ChevronLeft, MessageSquare, Zap } from 'lucide-react';
+import { Brain, Star, Clock, Trophy, RefreshCw, Play, Rabbit, Settings, Layers, Menu, X, Share2, Users, LogIn, LogOut, AlertCircle, Info, CheckCircle2, Loader2, Flag, ShieldAlert, LayoutDashboard, Globe, ExternalLink, Youtube, FileText, Gift, Skull, PlusCircle, Heart, ChevronRight, ChevronLeft, MessageSquare, Zap, Maximize2, Minimize2, Book, Code, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Counter from './components/react-bits/Counter';
-import { CompanionCorner } from './components/CompanionCorner';
-
 // Lazy Load Components
 const ConstellationMap = lazy(() => import('./components/ConstellationMap'));
 const GenerativeWidget = lazy(() => import('./components/GenerativeWidgets'));
@@ -157,7 +155,7 @@ const LoadingScreen = ({
   }, []);
 
   return (
-    <div className="flex h-screen bg-black items-center justify-center flex-col gap-6">
+    <div className="fixed inset-0 flex bg-black items-center justify-center flex-col gap-6 z-50">
       <div className="relative">
         <div className="w-16 h-16 border-t-2 border-white rounded-full animate-spin"></div>
         <div className="absolute inset-0 flex items-center justify-center">
@@ -210,9 +208,184 @@ const LoadingScreen = ({
 // ProtectedLayout will be defined inside App to access state
 
 // LessonView component - placeholder for now, will be properly implemented
+  const handleUpdateAiSoul = useCallback(async (newSoul: Partial<AISoulProfile>) => {
+      if (!userState.aiSoul) return;
+      
+      const updatedSoul = { ...userState.aiSoul, ...newSoul };
+      const newUserState = { ...userState, aiSoul: updatedSoul };
+      
+      setUserState(newUserState);
+      // Silent save - don't block UI
+      saveUserData(nodes, newUserState);
+  }, [userState, nodes, saveUserData]);
+
+  // Memoized Sidebar Component to prevent re-renders when unrelated state changes
+  const MemoizedSidebar = React.memo(({ 
+    sidebarOpen, 
+    mentorWide, 
+    contentMode, 
+    curriculumTitle, 
+    userDisplayName, 
+    userId, 
+    teams,
+    aiSoul,
+    onToggleMentorWide, 
+    onCloseSidebar, 
+    onNavigate,
+    onUpdateAiSoul
+  }: {
+    sidebarOpen: boolean;
+    mentorWide: boolean;
+    contentMode: ContentMode;
+    curriculumTitle: string;
+    userDisplayName: string | null;
+    userId: string | null;
+    teams: CoopTeam[];
+    aiSoul?: any;
+    onToggleMentorWide: (e?: React.MouseEvent) => void;
+    onCloseSidebar: (e?: React.MouseEvent) => void;
+    onNavigate: (path: string) => void;
+    onUpdateAiSoul: (soul: any) => void;
+  }) => {
+    return (
+      <div
+        className={`fixed inset-y-0 right-0 ${
+      className={`fixed inset-y-0 right-0 ${
+        mentorWide ? 'sm:w-[560px] lg:w-[720px] xl:w-[820px]' : 'sm:w-80 lg:w-96'
+      } bg-zinc-950/95 sm:bg-zinc-950/90 backdrop-blur-xl border-l border-white/5 transform transition-transform duration-300 ease-in-out will-change-transform z-50 flex flex-col isolate ${
+        sidebarOpen ? 'translate-x-0' : 'translate-x-full'
+      }`}
+      style={{ 
+        contain: 'layout style paint',
+        backfaceVisibility: 'hidden',
+        perspective: 1000
+      }}
+    >
+      <div className="h-16 flex items-center justify-between px-6 border-b border-white/5">
+        <h2 className="font-bold flex items-center gap-2 text-white text-sm tracking-widest uppercase">
+          <Brain size={16} className="text-zinc-500" /> Mentor Core
+        </h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onToggleMentorWide}
+            className="p-2 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors will-change-auto"
+            title={mentorWide ? 'Shrink Mentor Core' : 'Expand Mentor Core'}
+          >
+            {mentorWide ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
+          <button
+            onClick={onCloseSidebar}
+            className="p-2 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors will-change-auto"
+            title="Close Mentor Core"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-hidden relative">
+        <Suspense fallback={<div className="p-6 text-xs font-mono text-zinc-600">LOADING_MENTOR_...</div>}>
+          <MentorChat
+            className="h-full"
+            mode={contentMode}
+            sidebarOpen={sidebarOpen}
+            mentorWide={mentorWide}
+            curriculumTitle={curriculumTitle}
+            userDisplayName={userDisplayName}
+            userId={userId}
+            aiSoul={aiSoul}
+            onUpdateAiSoul={onUpdateAiSoul}
+          />
+        </Suspense>
+      </div>
+
+      {/* Social Section - Minimalist - Hidden when expanded */}
+      <div className={`border-t border-white/5 bg-black/20 flex flex-col transition-[height,opacity,padding] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[height,opacity] ${
+        mentorWide ? 'opacity-0 h-0 min-h-0 overflow-hidden pointer-events-none p-0' : 'opacity-100 h-48 p-6'
+      }`}>
+        {teams.length > 0 ? (
+          <>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Squads</h3>
+            </div>
+            <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+              {teams.slice(0, 3).map((team) => (
+                <div key={team.id} className="flex items-center justify-between p-2 bg-zinc-900/50 rounded-lg border border-zinc-800/50 hover:border-zinc-700/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Users size={12} className="text-zinc-500 shrink-0" />
+                    <span className="text-xs text-zinc-300 truncate font-mono">{team.name}</span>
+                  </div>
+                  {team.members.length > 0 && (
+                    <div className="flex -space-x-1 shrink-0 ml-2">
+                      {team.members.slice(0, 3).map((member, idx) => (
+                        <div key={idx} className="w-4 h-4 rounded-full bg-zinc-700 border border-zinc-600 flex items-center justify-center text-[8px] text-zinc-400 font-bold">
+                          {member.displayName?.[0]?.toUpperCase() || '?'}
+                        </div>
+                      ))}
+                      {team.members.length > 3 && (
+                        <div className="w-4 h-4 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[8px] text-zinc-500">
+                          +{team.members.length - 3}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => onNavigate('/coops')}
+              className="w-full py-2.5 border border-zinc-800 hover:border-zinc-600 text-xs text-zinc-400 hover:text-white rounded-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wide font-bold"
+            >
+              Manage Squads
+            </button>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
+            <p className="text-xs text-zinc-500 font-mono">NO_SQUAD_LINKED</p>
+            <button
+              onClick={() => onNavigate('/coops')}
+              className="px-6 py-2 bg-white text-black hover:bg-zinc-200 text-xs font-bold rounded-full transition-colors tracking-wide uppercase"
+            >
+              Initialize Co-op
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison: only re-render if these specific props change
+  return (
+    prevProps.sidebarOpen === nextProps.sidebarOpen &&
+    prevProps.mentorWide === nextProps.mentorWide &&
+    prevProps.contentMode === nextProps.contentMode &&
+    prevProps.curriculumTitle === nextProps.curriculumTitle &&
+    prevProps.userDisplayName === nextProps.userDisplayName &&
+    prevProps.userId === nextProps.userId &&
+    prevProps.teams === nextProps.teams &&
+    prevProps.aiSoul === nextProps.aiSoul
+  );
+});
+
 const LessonView = (props: any) => {
   const { nodeId } = useParams();
-  const { activeNode, setActiveNode, loadLesson, contentMode, ...rest } = props;
+  const { 
+    activeNode, 
+    setActiveNode, 
+    nodes,
+    loadLesson, 
+    currentLesson, 
+    lessonLoading, 
+    contentMode, 
+    setContentMode,
+    handleCompleteLesson,
+    triggerRabbitHole,
+    handleTriggerWidget,
+    activeWidgets,
+    loadingWidgets,
+    handleWidgetComplete,
+    navigate
+  } = props;
   
   useEffect(() => {
     if (nodeId && nodeId !== activeNode) {
@@ -221,10 +394,170 @@ const LessonView = (props: any) => {
     }
   }, [nodeId, activeNode, setActiveNode, loadLesson, contentMode]);
   
-  // For now, return a placeholder - the full lesson rendering will be added
+  if (lessonLoading || !currentLesson) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[50vh] gap-4">
+        <div className="w-12 h-12 border-t-2 border-cyan-400 rounded-full animate-spin"></div>
+        <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest animate-pulse">
+          {lessonLoading ? "Deciphering Knowledge Node..." : "Initializing..."}
+        </p>
+      </div>
+    );
+  }
+
+  const node = nodes.find((n: any) => n.id === nodeId);
+
   return (
-    <div className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8 lg:p-16 pb-20 sm:pb-32 md:pb-40">
-      <p className="text-white">Loading lesson {nodeId}...</p>
+    <div className="max-w-4xl mx-auto p-6 md:p-12 pb-32 space-y-12 animate-in fade-in duration-700">
+      
+      {/* Header */}
+      <div className="space-y-6 border-b border-white/10 pb-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 text-xs font-mono text-zinc-500 uppercase tracking-widest">
+            <span className="px-2 py-1 rounded bg-zinc-900 border border-zinc-800">Module {nodeId?.slice(-4)}</span>
+            <span>•</span>
+            <span>{contentMode} MODE</span>
+          </div>
+          <div className="flex items-center gap-2">
+             {/* Mode Switcher */}
+             <div className="flex bg-zinc-900 rounded-lg p-1 border border-zinc-800">
+                <button 
+                  onClick={() => props.setContentMode(ContentMode.ELI5)}
+                  className={`p-2 rounded-md transition-all ${contentMode === ContentMode.ELI5 ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  title="Explain Like I'm 5"
+                >
+                  <Zap size={14} />
+                </button>
+                <button 
+                  onClick={() => props.setContentMode(ContentMode.ACADEMIC)}
+                  className={`p-2 rounded-md transition-all ${contentMode === ContentMode.ACADEMIC ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  title="Academic"
+                >
+                  <Book size={14} />
+                </button>
+                <button 
+                  onClick={() => props.setContentMode(ContentMode.PRACTICAL)}
+                  className={`p-2 rounded-md transition-all ${contentMode === ContentMode.PRACTICAL ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  title="Practical"
+                >
+                  <Code size={14} />
+                </button>
+             </div>
+          </div>
+        </div>
+        
+        <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tighter leading-tight">
+          {currentLesson.title}
+        </h1>
+        
+        <p className="text-lg md:text-xl text-zinc-400 leading-relaxed max-w-2xl">
+          {currentLesson.summary}
+        </p>
+      </div>
+
+      {/* Content Sections */}
+      <div className="space-y-12">
+        {currentLesson.sections.map((section: any, idx: number) => (
+          <motion.div 
+            key={idx}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: idx * 0.1 }}
+            className="group"
+          >
+            {section.heading && (
+              <h3 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="w-1.5 h-6 bg-cyan-500 rounded-full"></span>
+                {section.heading}
+              </h3>
+            )}
+            
+            {section.type === 'code' ? (
+              <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-6 font-mono text-sm text-zinc-300 overflow-x-auto shadow-inner relative group-hover:border-zinc-700 transition-colors">
+                <div className="absolute top-3 right-3 flex gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 border border-red-500/50"></div>
+                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/50"></div>
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/50"></div>
+                </div>
+                <pre className="mt-2">{section.body}</pre>
+              </div>
+            ) : section.type === 'interactive_trigger' ? (
+               activeWidgets[idx] ? (
+                   <div className="my-8 animate-in fade-in zoom-in-95 duration-500">
+                       <GenerativeWidget 
+                          widget={activeWidgets[idx]} 
+                          onComplete={(xp: number) => handleWidgetComplete(xp, idx)}
+                          isCompleted={currentLesson.completedWidgetIndices?.includes(idx)}
+                       />
+                   </div>
+               ) : (
+                   <InteractiveTrigger 
+                      context={section.triggerContext || section.body}
+                      archetype={section.triggerArchetype || 'Analyst'}
+                      onActivate={() => handleTriggerWidget(idx, section.triggerContext || section.body, section.triggerArchetype || 'Analyst')}
+                      isLoading={loadingWidgets[idx]}
+                   />
+               )
+            ) : (
+              <div className="prose prose-invert prose-zinc max-w-none">
+                <p className="text-zinc-300 leading-relaxed whitespace-pre-wrap text-base md:text-lg">
+                  {section.body}
+                </p>
+              </div>
+            )}
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Resources */}
+      {currentLesson.externalResources && currentLesson.externalResources.length > 0 && (
+        <div className="pt-8 border-t border-white/5">
+          <h4 className="text-sm font-bold uppercase tracking-widest text-zinc-500 mb-6">External Data Sources</h4>
+          <div className="grid md:grid-cols-2 gap-4">
+            {currentLesson.externalResources.map((res: any, i: number) => (
+              <a 
+                key={i} 
+                href={res.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-4 p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 hover:bg-zinc-900 hover:border-zinc-600 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-black flex items-center justify-center text-zinc-500 group-hover:text-white transition-colors">
+                  {res.type === 'video' ? <Youtube size={18} /> : <Globe size={18} />}
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-zinc-200 group-hover:text-white transition-colors line-clamp-1">{res.title}</div>
+                  <div className="text-xs text-zinc-500 font-mono mt-0.5 flex items-center gap-1">
+                    <span>SOURCE_LINK</span>
+                    <ExternalLink size={10} />
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pt-12 border-t border-white/10">
+         <button 
+           onClick={triggerRabbitHole}
+           className="flex items-center gap-2 text-zinc-500 hover:text-purple-400 transition-colors text-sm font-mono uppercase tracking-widest group"
+         >
+           <Rabbit size={16} className="group-hover:animate-bounce" />
+           <span>Enter Rabbit Hole</span>
+         </button>
+
+         <button
+           onClick={handleCompleteLesson}
+           className="px-8 py-4 bg-white text-black hover:bg-zinc-200 rounded-full font-bold text-sm uppercase tracking-widest shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:shadow-[0_0_40px_rgba(255,255,255,0.4)] hover:scale-105 transition-all flex items-center gap-3"
+         >
+           <span>Complete Module</span>
+           <ArrowRight size={16} />
+         </button>
+      </div>
+
     </div>
   );
 };
@@ -239,12 +572,11 @@ function App() {
   const firebaseAuthDomain = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_FIREBASE_AUTH_DOMAIN : '';
   const hasEnvVars = firebaseApiKey && geminiKeys;
 
-  // Log Firebase config in production for debugging (first load only)
+  // Log Firebase config in development only
   useEffect(() => {
-    if (import.meta.env?.MODE === 'production' && firebaseAuthDomain) {
+    if (import.meta.env?.MODE === 'development' && firebaseAuthDomain) {
       console.log('🔧 [Config] Firebase Auth Domain:', firebaseAuthDomain);
       console.log('🔧 [Config] Current Domain:', window.location.hostname);
-      console.log('🔧 [Config] Match:', firebaseAuthDomain.includes(window.location.hostname) || window.location.hostname === 'eduos.chaimode.dev' ? '✅' : '❌');
     }
   }, [firebaseAuthDomain]);
 
@@ -328,8 +660,76 @@ function App() {
   const [currentLesson, setCurrentLesson] = useState<LessonContent | null>(null);
   const [contentMode, setContentMode] = useState<ContentMode>(ContentMode.ACADEMIC); // Default to Academic
   const [rabbitHoleContent, setRabbitHoleContent] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true); // Default open on desktop
-  
+  const [sidebarOpen, setSidebarOpen] = useState(false); // Default closed
+  const [mentorWide, setMentorWide] = useState<boolean>(() => localStorage.getItem('eduos:mentorWide') === 'true');
+  // Memoize button handlers to prevent re-renders - use functional updates to avoid dependencies
+  // Use ref to debounce rapid clicks and prevent double-toggles
+  // Use ref to track intended state to prevent StrictMode double-call issues
+  const lastToggleTimeRef = React.useRef<number>(0);
+  const intendedSidebarStateRef = React.useRef<boolean | null>(null);
+  const handleToggleSidebar = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const now = performance.now();
+    // Debounce: prevent toggles within 150ms of each other
+    if (now - lastToggleTimeRef.current < 150) {
+      return;
+    }
+    lastToggleTimeRef.current = now;
+    
+    // Track intended state to prevent StrictMode double-call from toggling twice
+    // Get current state first
+    setSidebarOpen(prev => {
+      // If we already have an intended state, use it (prevents double-toggle in StrictMode)
+      if (intendedSidebarStateRef.current !== null) {
+        const result = intendedSidebarStateRef.current;
+        intendedSidebarStateRef.current = null; // Clear after use
+        return result;
+      }
+      // First call: set intended state and toggle
+      const next = !prev;
+      intendedSidebarStateRef.current = next;
+      return next;
+    });
+  }, []); // Empty deps - using functional update
+
+  const lastMentorWideToggleRef = React.useRef<number>(0);
+  const handleToggleMentorWide = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const now = performance.now();
+    // Debounce: prevent toggles within 150ms of each other
+    if (now - lastMentorWideToggleRef.current < 150) {
+      return;
+    }
+    lastMentorWideToggleRef.current = now;
+    // Direct state update
+    setMentorWide(prev => !prev);
+  }, []); // Empty deps - using functional update
+
+  const handleCloseSidebar = useCallback((e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const now = performance.now();
+    // Debounce: prevent closes within 150ms of last toggle
+    if (now - lastToggleTimeRef.current < 150) {
+      return;
+    }
+    lastToggleTimeRef.current = now;
+    // Direct state update
+    setSidebarOpen(false);
+  }, []); // Empty deps - no state dependency
+
+  useEffect(() => {
+    localStorage.setItem('eduos:mentorWide', String(mentorWide));
+  }, [mentorWide]);
+
   // Dynamic Widget State
   const [activeWidgets, setActiveWidgets] = useState<{[key: string]: InteractiveWidget}>({});
   const [loadingWidgets, setLoadingWidgets] = useState<{[key: string]: boolean}>({});
@@ -345,7 +745,43 @@ function App() {
   // Admin State
   const [showReportModal, setShowReportModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false); // New state for delete confirmation
   const [reportReason, setReportReason] = useState('');
+
+  // AI Profile State (Local to settings)
+  const [aiProfileForm, setAiProfileForm] = useState({
+      soulPrompt: '',
+      memoryNotes: '',
+      helpStyle: ''
+  });
+
+  // Sync AI Profile Form when settings open
+  useEffect(() => {
+      if (showSettings) {
+          setAiProfileForm({
+              soulPrompt: userState.aiSoul?.soulPrompt || '',
+              memoryNotes: userState.aiSoul?.memoryNotes || '',
+              helpStyle: userState.aiSoul?.helpStyle || ''
+          });
+      }
+  }, [showSettings, userState.aiSoul]);
+
+  const handleSaveAiProfile = async () => {
+      const updatedSoul = {
+          soulPrompt: aiProfileForm.soulPrompt,
+          memoryNotes: aiProfileForm.memoryNotes,
+          helpStyle: aiProfileForm.helpStyle
+      };
+      
+      const newUserState = {
+          ...userState,
+          aiSoul: updatedSoul
+      };
+      
+      setUserState(newUserState);
+      await saveUserData(nodes, newUserState);
+      setNotification({ type: 'success', message: "AI Profile Updated." });
+  };
 
   // Graph Loading State
   const [graphLoading, setGraphLoading] = useState(false);
@@ -427,7 +863,7 @@ function App() {
         if (error instanceof Error && error.message.includes('unauthorized-domain')) {
           setNotification({ 
             type: 'error', 
-            message: "Domain not authorized. Please add eduos.chaimode.dev to Firebase authorized domains." 
+            message: `Domain not authorized. Add "${window.location.hostname}" in Firebase Console → Authentication → Authorized domains. See ENV_SETUP.md.` 
           });
         }
       }
@@ -665,7 +1101,7 @@ function App() {
     const nodeIndex = nodes.findIndex(n => n.id === nodeId);
     const isFirstLesson = nodeIndex === 0;
 
-    const content = await generateLesson(node.label, curriculumTitle, mode, isFirstLesson);
+    const content = await generateLesson(node.label, curriculumTitle, mode, isFirstLesson, userState.aiSoul);
     
     if (content) {
         setCurrentLesson(content);
@@ -677,7 +1113,7 @@ function App() {
     }
     
     setLessonLoading(false);
-  }, [nodes, curriculumTitle]);
+  }, [nodes, curriculumTitle, userState.aiSoul]);
 
   const handleStartJourney = async () => {
     console.log('🎯 [App] handleStartJourney called');
@@ -711,7 +1147,8 @@ function App() {
         });
         let errorMessage = "Authentication failed. Try again.";
         if (error?.code === 'auth/unauthorized-domain') {
-          errorMessage = "Domain not authorized. Please add eduos.chaimode.dev to Firebase authorized domains.";
+          const host = typeof window !== 'undefined' ? window.location.hostname : 'your-deployed-domain';
+          errorMessage = `Domain not authorized. Add "${host}" in Firebase Console → Authentication → Settings → Authorized domains. See ENV_SETUP.md.`;
         } else if (error?.code === 'auth/operation-not-allowed') {
           errorMessage = "Google sign-in is not enabled. Please enable it in Firebase Console.";
         }
@@ -1289,14 +1726,42 @@ function App() {
       }
   };
 
-  if (loadingData) {
-      return (
-          <LoadingScreen 
-            longLoad={loadingLong} 
-            onReset={() => { auth.signOut(); window.location.reload(); }} 
-          />
-      );
-  }
+  const handleDeleteAccount = async () => {
+      if (!user) return;
+      
+      // No window.confirm here, handled by UI state
+      try {
+          console.log("Deleting account for:", user.uid);
+          
+          // 1. Delete Firestore Data
+          if (!isLocalGuest(user)) {
+              await deleteDoc(doc(db, 'users', user.uid));
+          } else {
+              localStorage.removeItem(`eduos_user_${user.uid}`);
+              localStorage.removeItem(`eduos_teams_${user.uid}`); // Also clear teams
+          }
+
+          // 2. Delete Auth Account
+          await user.delete();
+          
+          // 3. Cleanup & Redirect
+          handleSignOut();
+          setNotification({ type: 'success', message: "Account deleted successfully." });
+          setShowSettings(false);
+          setConfirmDelete(false);
+
+      } catch (error: any) {
+          console.error("Delete account error:", error);
+          if (error.code === 'auth/requires-recent-login') {
+              setNotification({ type: 'error', message: "Security: Please sign out and sign in again to delete your account." });
+          } else {
+              setNotification({ type: 'error', message: "Failed to delete account. Please try again." });
+          }
+          setConfirmDelete(false);
+      }
+  };
+
+  // NOTE: Don't block the entire app UI on data loading. Individual routes handle loading states.
 
   // Show error if environment variables are missing (development only)
   if (!hasEnvVars && import.meta.env?.MODE === 'development') {
@@ -1359,7 +1824,7 @@ function App() {
   const ProtectedLayout = ({ children }: { children: ReactNode }) => (
     <>
       {/* --- MAIN CONTENT AREA --- */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-black">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-black" style={{ contain: 'layout style' }}>
         
         {/* HUD Header */}
         <header className="h-14 sm:h-16 border-b border-white/5 flex items-center justify-between px-4 sm:px-6 md:px-8 z-40 bg-black/80 backdrop-blur-md">
@@ -1420,8 +1885,8 @@ function App() {
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2 md:gap-4 border-l border-white/10 pl-2 sm:pl-4 md:pl-6 ml-1 sm:ml-2">
-              <button
-                onClick={() => setShowSettings(true)}
+            <button
+              onClick={handleOpenSettings}
                 className="p-1.5 sm:p-2 text-zinc-400 hover:text-white transition-colors hover:bg-zinc-800 rounded-lg touch-manipulation"
                 title="System Configuration"
               >
@@ -1437,8 +1902,8 @@ function App() {
             </div>
 
             <button 
-              onClick={() => setSidebarOpen(!sidebarOpen)} 
-              className={`text-white p-1.5 sm:p-2 hover:bg-zinc-800 rounded-lg transition-colors touch-manipulation ${sidebarOpen ? 'bg-zinc-800' : ''}`}
+              onClick={handleToggleSidebar} 
+              className={`text-white p-1.5 sm:p-2 hover:bg-zinc-800 rounded-lg transition-colors touch-manipulation will-change-auto ${sidebarOpen ? 'bg-zinc-800' : ''}`}
               title="Toggle Mentor Core"
             >
               <MessageSquare size={18} className={`sm:w-5 sm:h-5 ${sidebarOpen ? 'text-cyan-400' : 'text-zinc-400'}`} />
@@ -1454,6 +1919,10 @@ function App() {
 
     </>
   );
+
+  const handleOpenSettings = useCallback(() => {
+    setShowSettings(true);
+  }, []);
 
   return (
     <ErrorBoundary>
@@ -1547,12 +2016,88 @@ function App() {
                            </div>
                       </div>
 
+                      {/* AI Profile Section */}
+                      <div className="pt-4 border-t border-white/5">
+                          <div className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                              <Brain size={14} className="text-cyan-400" />
+                              Neural Personality
+                          </div>
+                          
+                          <div className="space-y-3">
+                              <div>
+                                  <label className="text-xs text-zinc-500 font-mono uppercase tracking-wide block mb-1">Soul Prompt (Custom Identity)</label>
+                                  <textarea 
+                                      value={aiProfileForm.soulPrompt}
+                                      onChange={(e) => setAiProfileForm(prev => ({...prev, soulPrompt: e.target.value}))}
+                                      placeholder="e.g. You are a strict but fair sensei..."
+                                      className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white focus:border-cyan-500/50 focus:outline-none min-h-[60px] resize-none"
+                                  />
+                              </div>
+
+                              <div>
+                                  <label className="text-xs text-zinc-500 font-mono uppercase tracking-wide block mb-1">Long-Term Memory</label>
+                                  <textarea 
+                                      value={aiProfileForm.memoryNotes}
+                                      onChange={(e) => setAiProfileForm(prev => ({...prev, memoryNotes: e.target.value}))}
+                                      placeholder="e.g. User prefers Python over JS, likes sci-fi analogies..."
+                                      className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white focus:border-cyan-500/50 focus:outline-none min-h-[60px] resize-none"
+                                  />
+                              </div>
+
+                              <div>
+                                  <label className="text-xs text-zinc-500 font-mono uppercase tracking-wide block mb-1">Help Style</label>
+                                  <input 
+                                      value={aiProfileForm.helpStyle}
+                                      onChange={(e) => setAiProfileForm(prev => ({...prev, helpStyle: e.target.value}))}
+                                      placeholder="e.g. Concise, Socratic, Example-Heavy..."
+                                      className="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs text-white focus:border-cyan-500/50 focus:outline-none"
+                                  />
+                              </div>
+
+                              <button 
+                                  onClick={handleSaveAiProfile}
+                                  className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold uppercase tracking-wide transition-colors border border-zinc-700 hover:border-zinc-600"
+                              >
+                                  Save Neural Profile
+                              </button>
+                          </div>
+                      </div>
+
                       <button 
                           onClick={handleSignOut}
-                          className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 rounded-xl text-sm font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 mt-4"
+                          className="w-full py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 rounded-xl text-sm font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 mt-4"
                       >
                           <LogOut size={16} /> Disconnect Neural Link
                       </button>
+
+                      {!confirmDelete ? (
+                          <button 
+                              onClick={() => setConfirmDelete(true)}
+                              className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 border border-red-500/20 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 mt-2"
+                          >
+                              <Skull size={14} /> Delete Account
+                          </button>
+                      ) : (
+                          <div className="mt-2 p-4 bg-red-950/30 border border-red-500/30 rounded-xl animate-in fade-in slide-in-from-top-2">
+                              <p className="text-xs text-red-200 mb-4 font-bold text-center leading-relaxed">
+                                  WARNING: This will permanently delete your account and all progress. This action cannot be undone.
+                              </p>
+                              <div className="flex gap-3">
+                                  <button 
+                                      onClick={() => setConfirmDelete(false)} 
+                                      className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold uppercase tracking-wide transition-colors"
+                                  >
+                                      Cancel
+                                  </button>
+                                  <button 
+                                      onClick={handleDeleteAccount} 
+                                      className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold uppercase tracking-wide transition-colors shadow-lg shadow-red-900/20"
+                                  >
+                                      Confirm Delete
+                                  </button>
+                              </div>
+                          </div>
+                      )}
                   </div>
               </div>
           </div>
@@ -1638,6 +2183,8 @@ function App() {
         {/* Protected Routes - Require Authentication */}
         <Route path="/dashboard" element={!hasCheckedAuth ? (
           <LoadingScreen message="Checking authentication..." />
+        ) : user && !hasLoadedUserData ? (
+          <LoadingScreen message="Loading your data..." longLoad={loadingLong} onReset={() => { auth.signOut(); window.location.reload(); }} />
         ) : user ? (
           <ProtectedLayout>
             <DashboardHub
@@ -1657,6 +2204,8 @@ function App() {
         
         <Route path="/map" element={!hasCheckedAuth ? (
           <LoadingScreen message="Checking authentication..." />
+        ) : user && !hasLoadedUserData ? (
+          <LoadingScreen message="Loading your data..." longLoad={loadingLong} onReset={() => { auth.signOut(); window.location.reload(); }} />
         ) : user ? (
           <ProtectedLayout>
             <div className="w-full h-full relative">
@@ -1709,6 +2258,8 @@ function App() {
 
         <Route path="/coops" element={!hasCheckedAuth ? (
           <LoadingScreen message="Checking authentication..." />
+        ) : user && !hasLoadedUserData ? (
+          <LoadingScreen message="Loading your data..." longLoad={loadingLong} onReset={() => { auth.signOut(); window.location.reload(); }} />
         ) : user ? (
           <ProtectedLayout>
             <CoopDashboard 
@@ -1728,6 +2279,8 @@ function App() {
 
         <Route path="/lesson/:nodeId" element={!hasCheckedAuth ? (
           <LoadingScreen message="Checking authentication..." />
+        ) : user && !hasLoadedUserData ? (
+          <LoadingScreen message="Loading your data..." longLoad={loadingLong} onReset={() => { auth.signOut(); window.location.reload(); }} />
         ) : user ? (
           <ProtectedLayout>
             <LessonView 
@@ -1766,6 +2319,8 @@ function App() {
         
         <Route path="/assignment/:id" element={!hasCheckedAuth ? (
           <LoadingScreen message="Checking authentication..." />
+        ) : user && !hasLoadedUserData ? (
+          <LoadingScreen message="Loading your data..." longLoad={loadingLong} onReset={() => { auth.signOut(); window.location.reload(); }} />
         ) : user ? (
           <ProtectedLayout>
             <LessonView 
@@ -1806,83 +2361,19 @@ function App() {
 
       {/* GLOBAL MENTOR SIDEBAR (available across onboarding + protected routes) */}
       {user && hasCheckedAuth && (
-        <div
-          className={`fixed inset-y-0 right-0 w-full sm:w-80 lg:w-96 bg-zinc-950/95 sm:bg-zinc-950/90 backdrop-blur-xl border-l border-white/5 transform transition-all duration-300 ease-in-out z-50 flex flex-col ${
-            sidebarOpen ? 'translate-x-0' : 'translate-x-full'
-          }`}
-        >
-          <div className="h-16 flex items-center justify-between px-6 border-b border-white/5">
-            <h2 className="font-bold flex items-center gap-2 text-white text-sm tracking-widest uppercase">
-              <Brain size={16} className="text-zinc-500" /> Mentor Core
-            </h2>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="p-2 text-zinc-500 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-hidden relative">
-            <Suspense fallback={<div className="p-6 text-xs font-mono text-zinc-600">LOADING_MENTOR_...</div>}>
-              <MentorChat className="h-full" mode={contentMode} />
-            </Suspense>
-          </div>
-
-          {/* Social Section - Minimalist */}
-          <div className="h-48 border-t border-white/5 bg-black/20 p-6 flex flex-col">
-            {teams.length > 0 ? (
-              <>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Active Squads</span>
-                  <span className="text-[10px] font-mono text-zinc-600">{teams.length}</span>
-                </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 mb-4">
-                  {teams.slice(0, 5).map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors border border-transparent hover:border-white/10 cursor-pointer"
-                      onClick={() => navigate('/coops')}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 rounded bg-gradient-to-tr from-zinc-800 to-zinc-700 text-[10px] flex items-center justify-center font-bold text-white">
-                          {t.name.substring(0, 1)}
-                        </div>
-                        <span className="text-xs text-zinc-300 font-medium truncate max-w-[120px]">{t.name}</span>
-                      </div>
-                      {t.raidReady && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={() => navigate('/coops')}
-                  className="w-full py-2.5 border border-zinc-800 hover:border-zinc-600 text-xs text-zinc-400 hover:text-white rounded-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wide font-bold"
-                >
-                  Manage Squads
-                </button>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
-                <p className="text-xs text-zinc-500 font-mono">NO_SQUAD_LINKED</p>
-                <button
-                  onClick={() => navigate('/coops')}
-                  className="px-6 py-2 bg-white text-black hover:bg-zinc-200 text-xs font-bold rounded-full transition-colors tracking-wide uppercase"
-                >
-                  Initialize Co-op
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* PERSISTENT COMPANION (bottom-right) */}
-      {user && hasCheckedAuth && (
-        <CompanionCorner
+        <MemoizedSidebar
           sidebarOpen={sidebarOpen}
-          onOpenChat={() => setSidebarOpen(true)}
+          mentorWide={mentorWide}
+          contentMode={contentMode}
+          curriculumTitle={curriculumTitle}
+          userDisplayName={userState.displayName}
+          userId={user?.uid || null}
+          teams={teams}
+          aiSoul={userState.aiSoul}
+          onToggleMentorWide={handleToggleMentorWide}
+          onCloseSidebar={handleCloseSidebar}
+          onNavigate={navigate}
+          onUpdateAiSoul={handleUpdateAiSoul}
         />
       )}
     </div>

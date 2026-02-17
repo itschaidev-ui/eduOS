@@ -11,7 +11,9 @@ type Props = {
 };
 
 export const CompanionAvatar: React.FC<Props> = ({
-  src = '/companion/avatars/halfbodynobg.png',
+  // Default to Halfbody image which exists in the avatars folder
+  // We crop toward the face via objectPosition in callers.
+  src = '/companion/avatars/Halfbody.png',
   alt = 'Companion avatar',
   size = 32,
   className = '',
@@ -22,19 +24,19 @@ export const CompanionAvatar: React.FC<Props> = ({
   if (errored) {
     return (
       <div
-        className={`rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center ${className}`}
+        className={`bg-zinc-900 flex items-center justify-center ${className}`}
         style={{ width: size, height: size }}
         aria-label={alt}
         title={alt}
       >
-        <Bot size={Math.max(12, Math.floor(size * 0.5))} className="text-zinc-400" />
+        <Bot size={Math.max(12, Math.floor(size * 0.5))} className="text-zinc-400" style={{ transform: 'rotate(90deg)' }} />
       </div>
     );
   }
 
   return (
     <div
-      className={`rounded-2xl overflow-hidden border border-white/10 bg-black/40 ${className}`}
+      className={`overflow-hidden ${className}`}
       style={{ width: size, height: size }}
       title={alt}
     >
@@ -42,7 +44,7 @@ export const CompanionAvatar: React.FC<Props> = ({
         src={src}
         alt={alt}
         className="w-full h-full object-cover"
-        style={{ objectPosition }}
+        style={{ objectPosition, transform: 'rotate(90deg)' }}
         onError={() => setErrored(true)}
         loading="lazy"
         decoding="async"

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Book, Users, Plus, ArrowRight, Brain, Trophy, Star, Zap, Layout, Target, CheckCircle2, Circle } from 'lucide-react';
+import { Badge, SparkleButton } from '@chaidev/ui';
 import { UserState, CoopTeam } from '../types';
 
 interface DashboardHubProps {
@@ -18,8 +19,9 @@ const DashboardHub: React.FC<DashboardHubProps> = ({
   curriculumTitle, 
   onSelectSubject, 
   onSelectTeam,
-  onCreateTeam 
+  onCreateTeam
 }) => {
+
   const container = {
     hidden: { opacity: 0 },
     show: {
@@ -117,14 +119,38 @@ const DashboardHub: React.FC<DashboardHubProps> = ({
 
         {/* Subjects Grid */}
         <motion.section variants={container} initial="hidden" animate="show">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-              <Book className="text-cyan-400" size={24} />
-              Active Modules
-            </h2>
-            <button className="text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors flex items-center gap-2">
-              View All <ArrowRight size={14} />
-            </button>
+          <div className="flex flex-col gap-2 mb-8">
+            <div className="flex items-center justify-between gap-6">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <Book className="text-cyan-400" size={24} />
+                Active Modules
+              </h2>
+              <div className="flex items-center gap-2">
+                <button className="text-xs font-bold uppercase tracking-widest text-zinc-500 hover:text-white transition-colors flex items-center gap-2">
+                  View All <ArrowRight size={14} />
+                </button>
+              </div>
+              <div
+                className="group flex items-center gap-3"
+                aria-label="Nova supervising modules"
+              >
+                <img
+                  src="/companion/avatars/sitting.png"
+                  alt="Nova sitting beside Active Modules"
+                  className="w-32 h-32 rounded-full object-cover shadow-[0_10px_45px_rgba(0,0,0,0.55)]"
+                  loading="lazy"
+                />
+                <div className="text-left text-sm relative">
+                  <p className="text-white text-[10px] uppercase tracking-[0.4em]">Nova</p>
+                  <p className="text-[12px] text-zinc-400 leading-tight">
+                    Watching your modules and ready to guide each step.
+                  </p>
+                  <span className="absolute left-0 top-full mt-1 text-[10px] tracking-[0.6em] text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                    N O V A
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -139,9 +165,7 @@ const DashboardHub: React.FC<DashboardHubProps> = ({
               <div className="relative z-10 flex flex-col h-full justify-between">
                 <div>
                   <div className="flex justify-between items-start mb-4">
-                    <span className="px-3 py-1 rounded-full bg-cyan-950/30 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold uppercase tracking-widest">
-                      In Progress
-                    </span>
+                    <Badge label="In Progress" tone="info" appearance="soft" size="sm" className="uppercase tracking-widest" />
                     <ArrowRight className="text-zinc-600 group-hover:text-cyan-400 -rotate-45 group-hover:rotate-0 transition-all" />
                   </div>
                   <h3 className="text-2xl font-bold text-white mb-2 line-clamp-2">
@@ -182,12 +206,13 @@ const DashboardHub: React.FC<DashboardHubProps> = ({
               <Users className="text-emerald-400" size={24} />
               Active Squads
             </h2>
-            <button 
+            <SparkleButton
+              text="Initialize Squad"
+              size="sm"
+              hue={160}
               onClick={onCreateTeam}
-              className="text-[10px] sm:text-xs font-bold uppercase tracking-widest bg-white text-black px-3 sm:px-4 py-1.5 sm:py-2 rounded-full hover:bg-zinc-200 transition-colors flex items-center gap-1.5 sm:gap-2 touch-manipulation"
-            >
-              <Plus size={12} className="sm:w-3.5 sm:h-3.5" /> <span className="hidden sm:inline">Initialize Squad</span><span className="sm:hidden">New Squad</span>
-            </button>
+              className="!text-[10px] sm:!text-xs !font-bold !uppercase !tracking-widest"
+            />
           </div>
 
           {teams.length > 0 ? (
@@ -204,10 +229,7 @@ const DashboardHub: React.FC<DashboardHubProps> = ({
                       {team.name.substring(0, 2).toUpperCase()}
                     </div>
                     {team.raidReady && (
-                      <span className="flex h-3 w-3 relative">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                      </span>
+                      <Badge label="Raid Ready" tone="success" appearance="soft" size="sm" />
                     )}
                   </div>
                   
@@ -248,4 +270,4 @@ const DashboardHub: React.FC<DashboardHubProps> = ({
   );
 };
 
-export default DashboardHub;
+export default React.memo(DashboardHub);

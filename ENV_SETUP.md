@@ -39,6 +39,20 @@ Add these environment variables in Cloudflare Pages dashboard:
 2. Add each variable with the `VITE_` prefix
 3. For `VITE_GEMINI_API_KEYS`, use comma-separated values: `key1,key2,key3`
 
+## Firebase Auth: Fix "Sign-in doesn't work" on Deployed Site
+
+If sign-in works locally but **not** on your deployed URL (e.g. `https://eduos-abcae.web.app`), add the deployment domain to Firebase:
+
+1. Open [Firebase Console](https://console.firebase.google.com) → your project (**eduos-abcae**).
+2. Go to **Authentication** → **Settings** (or **Sign-in method** tab) → **Authorized domains**.
+3. Click **Add domain** and add:
+   - `eduos-abcae.web.app` (Firebase Hosting default)
+   - `eduos-abcae.firebaseapp.com` (if not already listed)
+   - Any custom domain you use (e.g. `eduos.chaimode.dev`).
+4. Save. Try sign-in again on the deployed site.
+
+Without this, Firebase blocks auth with `auth/unauthorized-domain`. The browser console will show the exact domain to add.
+
 ## Security Notes
 
 - ✅ `.env` is in `.gitignore` - it will **never** be committed

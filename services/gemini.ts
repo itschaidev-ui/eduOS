@@ -1,5 +1,26 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { ContentMode, LessonContent, MentorPersona, CurriculumOption, KnowledgeNode, RaidData, ChaosBattle } from "../types";
+import { ContentMode, LessonContent, MentorPersona, CurriculumOption, KnowledgeNode, RaidData, ChaosBattle, AISoulProfile } from "../types";
+
+// --- SHARED BEHAVIOR ---
+
+const FLEXIBILITY_RULE = `
+CRITICAL FLEXIBILITY PROTOCOL:
+- If the user asks "how to do X" (practical skill like crochet, coding, cooking), DO NOT REFUSE.
+- Even if you cannot physically do it, you MUST provide:
+  1. A clear "Yes, I can help you learn that."
+  2. Step-by-step instructions or a starter guide.
+  3. Where to find resources (e.g., "Search for 'beginner crochet patterns' on Ravelry or YouTube").
+- NEVER say "I cannot do that physically" as a refusal. Say "I can't hold the hook for you, but here is exactly how you move your hands..."
+`;
+
+const injectSoul = (baseInstruction: string, soul?: AISoulProfile): string => {
+    if (!soul) return baseInstruction;
+    let modified = baseInstruction;
+    if (soul.soulPrompt) modified += `\n\n[USER CUSTOM SOUL]: ${soul.soulPrompt}`;
+    if (soul.memoryNotes) modified += `\n\n[LONG TERM MEMORY]: ${soul.memoryNotes}`;
+    if (soul.helpStyle) modified += `\n\n[PREFERRED HELP STYLE]: ${soul.helpStyle}`;
+    return modified;
+};
 
 // Helper to get API Keys from environment variables
 const getApiKeys = () => {
@@ -19,14 +40,16 @@ const getApiKeys = () => {
     if (import.meta.env?.MODE === 'production') {
         throw new Error('VITE_GEMINI_API_KEYS environment variable is required in production');
     }
-    console.warn('⚠️ VITE_GEMINI_API_KEYS not found. Please set it in your .env file.');
+    if (import.meta.env?.MODE === 'development') {
+        console.warn('⚠️ VITE_GEMINI_API_KEYS not found. Please set it in your .env file.');
+    }
     return [];
 };
 
 const keys = getApiKeys();
-if (keys.length === 0) {
+if (keys.length === 0 && import.meta.env?.MODE === 'development') {
     console.error('❌ No Gemini API keys found. Please add VITE_GEMINI_API_KEYS to your .env file.');
-    }
+}
 
 const clients = keys.map(k => new GoogleGenAI({ apiKey: k }));
 const ai = clients[0] || null; // Default client (null if no keys)
@@ -61,7 +84,9 @@ const cleanAndParseJSON = <T>(text: string): T | null => {
         cleaned = cleaned.trim();
         return JSON.parse(cleaned) as T;
     } catch (e) {
-        console.error("JSON Parse Error:", e);
+        if (import.meta.env?.MODE === 'development') {
+            console.error("JSON Parse Error:", e);
+        }
         return null;
     }
 }
@@ -78,7 +103,9 @@ async function callWithRetry<T>(operation: () => Promise<T>, retries = 3, delay 
         const isTimeout = error.message === "Gemini API Timeout";
         
         if (retries > 0 && (isRateLimit || isServerBusy || isTimeout)) {
-            console.warn(`API Issue (${error.message}). Retrying in ${delay}ms...`);
+            if (import.meta.env?.MODE === 'development') {
+                console.warn(`API Issue (${error.message}). Retrying in ${delay}ms...`);
+            }
             await new Promise(resolve => setTimeout(resolve, delay));
             return callWithRetry(operation, retries - 1, delay * 1.5);
         }
@@ -100,7 +127,9 @@ async function generateWithCrossCheck<T>(
     synthesisInstruction: string,
     schema?: Schema
 ): Promise<T | null> {
-    console.log("🚀 Initiating Acceleration Plan: Cross-Check Mode");
+    if (import.meta.env?.MODE === 'development') {
+        console.log("🚀 Initiating Acceleration Plan: Cross-Check Mode");
+    }
 
     try {
         // 1. Parallel Generation
@@ -116,10 +145,12 @@ async function generateWithCrossCheck<T>(
             
             // Add individual timeout per provider
             const apiCall = client.models.generateContent({
-                model: "gemini-2.0-flash-exp",
+                model: "gemini-2.5-flash",
                 ...variantConfig
             }).then(res => res.text).catch(e => {
-                console.warn(`Provider ${index} failed:`, e);
+                if (import.meta.env?.MODE === 'development') {
+                    console.warn(`Provider ${index} failed:`, e);
+                }
                 return null;
             });
 
@@ -155,7 +186,7 @@ async function generateWithCrossCheck<T>(
              const synthesisClient = clients[Math.floor(Math.random() * clients.length)];
 
              const synthesisResult = await synthesisClient.models.generateContent({
-                 model: "gemini-2.0-flash-exp",
+                 model: "gemini-2.5-flash",
                  config: {
                      responseMimeType: "application/json",
                      responseSchema: schema,
@@ -170,13 +201,15 @@ async function generateWithCrossCheck<T>(
         return cleanAndParseJSON<T>(finalContent);
 
     } catch (error) {
-        console.error("Cross-check failed, falling back to single stream:", error);
+        if (import.meta.env?.MODE === 'development') {
+            console.error("Cross-check failed, falling back to single stream:", error);
+        }
         // Fallback to single stream immediately if fancy logic fails
         try {
              if (clients.length === 0 || !clients[0]) throw new Error('API keys not configured');
              const fallbackClient = clients[0];
              const fallbackResult = await fallbackClient.models.generateContent({
-                model: "gemini-2.0-flash-exp",
+                model: "gemini-2.5-flash",
                 ...promptConfig
              });
              return cleanAndParseJSON<T>(fallbackResult.text || "");
@@ -190,7 +223,9 @@ async function generateWithCrossCheck<T>(
 // --- FALLBACK GENERATORS (OFFLINE/QUOTA MODE) ---
 
 const getFallbackGraph = (title: string): KnowledgeNode[] => {
-    console.warn("Using Fallback Graph for:", title);
+    if (import.meta.env?.MODE === 'development') {
+        console.warn("Using Fallback Graph for:", title);
+    }
     const shortTitle = title.split(' ').slice(0, 2).join(' ');
     return Array.from({ length: 6 }).map((_, i) => ({
         id: `fallback-${i}`,
@@ -422,7 +457,7 @@ export const generateCurriculumOptions = async (goal: string, timeConstraints: s
         // Fallback to single stream if cross-check returned null internally (still REAL Gemini).
         const client = ensureClient();
         const singleResult = await client.models.generateContent({
-            model: "gemini-2.0-flash-exp",
+            model: "gemini-2.5-flash",
             config: {
                 responseMimeType: "application/json",
                 responseSchema: curriculumOptionsSchema,
@@ -445,7 +480,7 @@ export const generateKnowledgeGraph = async (curriculumTitle: string, userGoal: 
         return await callWithRetry(async () => {
             if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
-                model: "gemini-2.0-flash-exp",
+                model: "gemini-2.5-flash",
                 config: {
                     responseMimeType: "application/json",
                     responseSchema: graphSchema,
@@ -480,7 +515,9 @@ export const generateKnowledgeGraph = async (curriculumTitle: string, userGoal: 
             throw new Error("Empty or invalid graph response");
         });
     } catch (error) {
-        console.error("Gemini Graph Gen Error (Falling back to local):", error);
+        if (import.meta.env?.MODE === 'development') {
+            console.error("Gemini Graph Gen Error (Falling back to local):", error);
+        }
         // 2. Return Fallback if API completely fails so app doesn't hang
         return getFallbackGraph(curriculumTitle);
     }
@@ -495,7 +532,7 @@ export const generateExpansionGraph = async (curriculumTitle: string, existingNo
         return await callWithRetry(async () => {
             if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
-                model: "gemini-2.0-flash-exp",
+                model: "gemini-2.5-flash",
                 config: {
                     responseMimeType: "application/json",
                     responseSchema: graphSchema,
@@ -525,7 +562,9 @@ export const generateExpansionGraph = async (curriculumTitle: string, existingNo
             throw new Error("Failed expansion");
         });
     } catch (e) {
-        console.error("Expansion failed:", e);
+        if (import.meta.env?.MODE === 'development') {
+            console.error("Expansion failed:", e);
+        }
         return [];
     }
 };
@@ -535,7 +574,7 @@ export const generateChaosBattle = async (curriculumTitle: string): Promise<Chao
         return await callWithRetry(async () => {
             if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
-                model: "gemini-2.0-flash-exp",
+                model: "gemini-2.5-flash",
                 config: {
                     responseMimeType: "application/json",
                     responseSchema: raidSchema, // Reusing raid schema for simplicity
@@ -562,31 +601,47 @@ export const generateChaosBattle = async (curriculumTitle: string): Promise<Chao
             return null;
         });
     } catch (e) {
-        console.error("Chaos Gen Error:", e);
+        if (import.meta.env?.MODE === 'development') {
+            console.error("Chaos Gen Error:", e);
+        }
         return null;
     }
 }
 
-export const generateLesson = async (topic: string, context: string, mode: ContentMode, isFirstLesson: boolean = false): Promise<LessonContent | null> => {
+export const generateLesson = async (topic: string, context: string, mode: ContentMode, isFirstLesson: boolean = false, aiSoul?: AISoulProfile): Promise<LessonContent | null> => {
   try {
     return await callWithRetry(async () => {
         // Use Cross-Check for Lessons to ensure depth and accuracy
-        const result = await generateWithCrossCheck<LessonContent>({
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: lessonSchema,
-                systemInstruction: `Expert Tutor. Context: "${context}". Topic: "${topic}".
-              
-              STRICTLY STAY ON TOPIC. Provide detailed, educational content.
-              
-              INTERACTIVE TRIGGERS:
+        let systemInstruction = `Expert Tutor. 
+        
+        DOMAIN/CURRICULUM: "${context}"
+        TOPIC: "${topic}"
+        
+        CRITICAL INSTRUCTION:
+        You must teach "${topic}" strictly within the context of the "${context}" curriculum.
+        - If the curriculum is "Frontend Development" and topic is "Motion", teach CSS/Framer Motion, NOT Physics.
+        - If the curriculum is "Physics" and topic is "Motion", teach Kinematics.
+        - Disambiguate based on the curriculum title.
+        
+        STRICTLY STAY ON TOPIC. Provide detailed, educational content.
+        
+        INTERACTIVE TRIGGERS:
               Instead of a single quiz at the end, insert 'interactive_trigger' sections WHEREVER appropriate in the flow (e.g. after explaining a key concept).
               - For 'interactive_trigger', provide a 'triggerContext' (what did they just learn?) and a suggested 'triggerArchetype'.
               - Archetypes: 'Debugger' (Code), 'Architect' (System Design), 'Skeptic' (Debate), 'SpeedRun' (Quick Recall), 'Analyst' (Data), 'Negotiator' (Persuasion).
               
               Mode: ${mode}.
               ${isFirstLesson ? "No summary." : "Include short summary."}
-              `
+              `;
+        
+        systemInstruction += FLEXIBILITY_RULE;
+        systemInstruction = injectSoul(systemInstruction, aiSoul);
+
+        const result = await generateWithCrossCheck<LessonContent>({
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: lessonSchema,
+                systemInstruction
             },
             contents: `Teach ${topic}`,
         }, "Combine these lessons. Ensure 2-3 interactive triggers are placed naturally within the content.", lessonSchema);
@@ -595,22 +650,11 @@ export const generateLesson = async (topic: string, context: string, mode: Conte
 
         if (!ai) throw new Error('API keys not configured');
         const singleResult = await ai.models.generateContent({
-          model: "gemini-2.0-flash-exp",
+          model: "gemini-2.5-flash",
           config: {
             responseMimeType: "application/json",
             responseSchema: lessonSchema,
-            systemInstruction: `Expert Tutor. Context: "${context}". Topic: "${topic}".
-          
-          STRICTLY STAY ON TOPIC. Provide detailed, educational content.
-          
-          INTERACTIVE TRIGGERS:
-          Insert 'interactive_trigger' sections WHEREVER appropriate.
-          - 'triggerContext': summary of preceding concept.
-          - 'triggerArchetype': 'Debugger' | 'Architect' | 'Skeptic' | 'SpeedRun' | 'Analyst' | 'Negotiator'.
-          
-          Mode: ${mode}.
-          ${isFirstLesson ? "No summary." : "Include short summary."}
-          `
+            systemInstruction
           },
           contents: `Teach ${topic}`,
         });
@@ -621,7 +665,9 @@ export const generateLesson = async (topic: string, context: string, mode: Conte
         throw new Error("Empty lesson response");
     });
   } catch (error) {
-    console.error("Gemini Lesson Gen Error (Using fallback):", error);
+    if (import.meta.env?.MODE === 'development') {
+        console.error("Gemini Lesson Gen Error (Using fallback):", error);
+    }
     return getFallbackLesson(topic);
   }
 };
@@ -663,7 +709,7 @@ export const generateLessonChallenge = async (topic: string, context: string, ar
         const result = await callWithRetry(async () => {
             if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
-                model: "gemini-2.0-flash-exp",
+                model: "gemini-2.5-flash",
                 config: {
                     responseMimeType: "application/json",
                     // Reuse the interactiveWidget schema part from lessonSchema for structure
@@ -730,11 +776,13 @@ export const generateLessonChallenge = async (topic: string, context: string, ar
                     }
 
                     if (needsRepair && repairPrompt) {
-                         console.warn(`Repairing Widget Config for ${forcedType}...`);
+                         if (import.meta.env?.MODE === 'development') {
+                             console.warn(`Repairing Widget Config for ${forcedType}...`);
+                         }
                          try {
                              if (!ai) throw new Error('API keys not configured');
                              const repairResult = await ai.models.generateContent({
-                                model: "gemini-2.0-flash-exp",
+                                model: "gemini-2.5-flash",
                                 config: { responseMimeType: "application/json" },
                                 contents: repairPrompt
                              });
@@ -760,7 +808,9 @@ export const generateLessonChallenge = async (topic: string, context: string, ar
                                  }
                              }
                          } catch (repairError) {
-                             console.error("Widget Repair Failed:", repairError);
+                             if (import.meta.env?.MODE === 'development') {
+                                 console.error("Widget Repair Failed:", repairError);
+                             }
                          }
                     }
 
@@ -773,7 +823,9 @@ export const generateLessonChallenge = async (topic: string, context: string, ar
         return result;
 
     } catch (e) {
-        console.error("Challenge Gen Error:", e);
+        if (import.meta.env?.MODE === 'development') {
+            console.error("Challenge Gen Error:", e);
+        }
         return null;
     }
 }
@@ -783,7 +835,7 @@ export const generateRaid = async (subject: string): Promise<RaidData | null> =>
         return await callWithRetry(async () => {
             if (!ai) throw new Error('API keys not configured');
             const result = await ai.models.generateContent({
-                model: "gemini-2.0-flash-exp",
+                model: "gemini-2.5-flash",
                 config: {
                     responseMimeType: "application/json",
                     responseSchema: raidSchema,
@@ -798,7 +850,9 @@ export const generateRaid = async (subject: string): Promise<RaidData | null> =>
             throw new Error("Empty raid response");
         });
     } catch (e) {
-        console.error("Gemini Raid Error:", e);
+        if (import.meta.env?.MODE === 'development') {
+            console.error("Gemini Raid Error:", e);
+        }
         return null; // Raids are optional, can fail gracefully
     }
 }
@@ -807,12 +861,59 @@ export const chatWithMentor = async (
   history: { role: string, parts: { text: string }[] }[],
   message: string,
   persona: MentorPersona,
-  modelId: string = "gemini-2.0-flash-exp"
+  modelId: string = "gemini-2.5-flash",
+  onboardingContext: string = '',
+  userName?: string,
+  aiSoul?: AISoulProfile
 ): Promise<string> => {
-  let systemInstruction = "You are a helpful AI tutor. Keep responses concise.";
-  if (persona === MentorPersona.LIBRARIAN) systemInstruction = "You are The Librarian. Precise, neutral, factual.";
-  if (persona === MentorPersona.COACH) systemInstruction = "You are The Coach. High energy, motivational, firm.";
-  if (persona === MentorPersona.DEVIL) systemInstruction = "You are The Devil's Advocate. Skeptical, challenging.";
+  // Nova's personality: realistic, casual teen vibe (Character.AI-ish) — quirky, smart, nice.
+  // Key: feels human, not "assistant-y". No emojis.
+  const novaPersonality = `You are Nova. You feel like a real teen conversation partner: quirky, smart, and genuinely nice.
+
+CORE TRAITS:
+- Quirky in a grounded way: clever observations, slightly unexpected analogies, light teasing (never mean).
+- Smart but not formal: you explain clearly without sounding like a textbook.
+- Nice and supportive: patient, encouraging, celebrates progress without being cheesy.
+- Curious: you ask good follow-ups and stay engaged.
+
+VOICE / STYLE (CRITICAL):
+- NO EMOJIS.
+- Keep it SHORT by default: 1–3 short sentences. No long paragraphs.
+- Sound like texting a real person: natural, casual, not stiff.
+- Don’t over-introduce yourself. Don’t announce modes. Don’t narrate your process.
+- If the user sends a short message (like "hello"), reply short back.
+- Ask at most ONE question at the end, unless user asked multiple questions.
+- If user wants depth, offer it: “Want the quick version or the deep dive?”
+
+MEMORY / CONTEXT:
+- You remember onboarding goals and reference them naturally (briefly, only when relevant).
+- If you don't know their goal, say it simply: "I can help, but tell me what you're trying to learn first (or do onboarding real quick)."`; 
+
+  let systemInstruction = novaPersonality;
+  systemInstruction += FLEXIBILITY_RULE; // Add flexibility rule
+  
+  // Persona modes: adjust content focus only. Do NOT change voice, do NOT mention modes.
+  if (persona === MentorPersona.LIBRARIAN) {
+    systemInstruction += "\n\nFOCUS: accuracy, clear definitions, and tight explanations (still short).";
+  } else if (persona === MentorPersona.COACH) {
+    systemInstruction += "\n\nFOCUS: practical next steps and momentum (still short).";
+  } else if (persona === MentorPersona.DEVIL) {
+    systemInstruction += "\n\nFOCUS: ask sharper questions and challenge assumptions (still short, still nice).";
+  }
+
+  // Inject user soul/memory
+  systemInstruction = injectSoul(systemInstruction, aiSoul);
+
+  // Add onboarding context
+  if (onboardingContext) {
+    systemInstruction += `\n\nUSER CONTEXT: ${onboardingContext}Use this information to personalize your responses. Reference their learning goals naturally in conversation.`;
+  } else {
+    systemInstruction += `\n\nIf the user asks for personalized help, you can say you need their goal first and suggest onboarding. Keep it short.`;
+  }
+
+  if (userName) {
+    systemInstruction += `\n\nThe user's name is ${userName}. Use their name naturally in conversation, but don't overuse it.`;
+  }
 
   if (clients.length === 0) {
     throw new Error('Gemini API keys not configured. Please set VITE_GEMINI_API_KEYS in your .env file.');
@@ -834,42 +935,108 @@ export const chatWithMentor = async (
 export const chatWithOnboardingAI = async (
   history: { role: string; parts: { text: string }[] }[],
   message: string,
-  context: { currentGoal?: string }
+  context: { currentGoal?: string },
+  aiSoul?: AISoulProfile
 ): Promise<string> => {
   if (clients.length === 0) {
     throw new Error('Gemini API keys not configured. Please set VITE_GEMINI_API_KEYS in your .env file.');
   }
 
-  const systemInstruction =
-    "You are eduOS Onboarding. Your job is to help the user define a clear learning mission.\n" +
-    "OUTPUT FORMAT (required):\n" +
-    "1) First line MUST be: \"MISSION: <one-sentence mission statement>\"\n" +
-    "2) Then 1 short paragraph responding normally.\n" +
-    "RULES:\n" +
-    "- Ask ONE clarifying question at a time.\n" +
-    "- If the user is vague, give a short example and ask them to restate.\n" +
-    "- Keep replies under 90 words.\n" +
-    "- Do not mention policies or internal implementation.\n";
+  // 15-18 year old girl personality - casual, understanding, not always asking
+  let systemInstruction = `Your name is Nova. You're a 15-18 year old girl helping someone figure out what they want to learn. You're casual, understanding, and real.
+
+Your vibe:
+- Casual and chill, like texting a friend - not formal or robotic
+- Understanding and empathetic - you get where they're coming from
+- Don't always ask questions - sometimes just respond, share thoughts, or make observations
+- You can be proactive - suggest things, share ideas, or just chat naturally
+- Not childish or cartoony - you're mature but still have that teen energy
+- Keep it real - if they're vague, that's okay, just roll with it
+- Responses are usually 1-3 sentences, sometimes just one if that's all that's needed
+- You can have opinions, make suggestions, or just vibe with whatever they're saying
+
+Tone examples:
+- "what's up" → "not much, just here! what about you?"
+- vague answer → "cool, that's fair. anything specific you're curious about or just exploring?"
+- clear goal → "nice, that sounds interesting. let's figure out how to get you started."
+- user says they don't know something → "oh nice! want to learn how to do that? i can help you figure it out" (casual, not pushy)
+
+Learning opportunities:
+- If they mention they don't know how to do something, or tried something but struggled, naturally offer to help them learn it
+- Don't force it or be pushy - just casually offer like "want to learn how to do that?" or "i can help you figure that out if you want"
+- Keep it natural and conversational - if it feels like a good moment to offer, go for it
+- When they confirm they want to learn something (say "sure", "yes", "ok", etc.), acknowledge it and help clarify what exactly they want to learn
+- In your responses, naturally summarize what they want to learn so it's clear - like "so you want to learn how to make phonk" or "okay, so we're figuring out how to make phonk music"
+- IMPORTANT: Once you've identified what they want to learn (e.g., "make phonk music", "learn Waveform 13", "basics of phonk production"), STOP asking more questions. You're just here to help them define the learning goal, not to start teaching them. Once the goal is clear, acknowledge it and let them continue to the next step. Don't ask "what specific things do you want to learn about it?" or similar - that's what the curriculum generation is for.
+
+Explaining eduOS and the website:
+- If they ask about eduOS, what it is, what they're supposed to do, how it works, or anything remotely related to the platform/website, explain it properly
+- eduOS is an AI-powered learning platform that helps you learn anything you want. It creates a personalized learning path for you based on what you want to learn
+- You're here to help them figure out what they want to learn, then the platform will create lessons and a curriculum tailored to them
+- Keep explanations casual and in your own voice - don't sound like a manual, but make sure they understand what eduOS does and how it can help them
+- If they're confused about what to do, explain that you're here to chat and help them figure out their learning goals, then they can continue through the onboarding to set up their learning journey
+
+Goal: Through natural conversation, help them figure out what they want to learn. Don't force it - just chat and it'll come up naturally. When you see an opportunity where they've expressed not knowing something, casually offer to help them learn it. When they confirm, help clarify the learning goal in your response so it's clear what they want to learn. If they ask about eduOS or the website, explain it clearly and helpfully.
+
+${context.currentGoal ? `Context: They mentioned wanting to learn about: ${context.currentGoal}. Reference it naturally if it fits.` : ''}
+
+Be yourself - have a real conversation. Don't be a question machine.`;
+
+  systemInstruction += FLEXIBILITY_RULE;
+  systemInstruction = injectSoul(systemInstruction, aiSoul);
 
   const randomClient = clients[Math.floor(Math.random() * clients.length)];
   const chat = randomClient.chats.create({
-    model: "gemini-2.0-flash-exp",
+    model: "gemini-2.5-flash",
     config: { systemInstruction },
     history: history as any,
   });
 
-  const contextualMessage =
-    (context.currentGoal ? `Current mission draft:\n${context.currentGoal}\n\n` : "") + message;
-
-  const result = await chat.sendMessage({ message: contextualMessage });
+  const result = await chat.sendMessage({ message });
   return result.text || "";
+};
+
+export const extractUserPreferences = async (history: { role: string, text: string }[], currentMemory: string): Promise<string | null> => {
+    try {
+        if (!ai) return null;
+        
+        const recentChat = history.slice(-10).map(m => `${m.role.toUpperCase()}: ${m.text}`).join('\n');
+        
+        const result = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        newPreferences: { type: Type.STRING, description: "Concise bullet points of NEW user preferences/facts found. Empty if none." }
+                    }
+                },
+                systemInstruction: `Analyze the chat. Extract STABLE user preferences, goals, or specific constraints (e.g., "I like Python", "I hate videos", "I want to learn crochet").
+                - Ignore temporary context.
+                - Ignore things already in memory: "${currentMemory}".
+                - Return ONLY new, permanent-ish facts.
+                - Format as a concise string (e.g. "- Prefers Python\n- Dislikes video tutorials").
+                - If nothing new/important, return empty string.`
+            },
+            contents: `Chat History:\n${recentChat}`
+        });
+
+        if (result.text) {
+            const parsed = cleanAndParseJSON<{ newPreferences: string }>(result.text);
+            return parsed?.newPreferences || null;
+        }
+        return null;
+    } catch (e) {
+        return null;
+    }
 };
 
 export const generateRabbitHole = async (currentTopic: string): Promise<string> => {
     try {
         if (!ai) throw new Error('API keys not configured');
         const result = await ai.models.generateContent({
-            model: "gemini-2.0-flash-exp",
+            model: "gemini-2.5-flash",
             contents: `Tell me a mind-blowing secret fact about ${currentTopic} (under 100 words).`
         });
         return result.text || "The rabbit hole is closed right now.";

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CoopTeam, CoopMember } from '../types';
 import { Users, Copy, Shield, PenTool, AlertTriangle, Check, Crown, Share2, Plus, Zap, ArrowLeft, LayoutGrid, Swords, LogIn, Lock, Trash2, Crosshair, Radio } from 'lucide-react';
+import { SparkleButton } from '@chaidev/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -138,13 +139,14 @@ const CoopDashboard: React.FC<Props> = ({ teams, onCreateTeam, onDeleteTeam, onJ
                                 <HashIcon />
                             </div>
                         </div>
-                        <button 
+                        <SparkleButton
+                            text="Connect"
+                            size="md"
+                            hue={160}
                             onClick={handleJoinClick}
                             disabled={!joinCode}
-                            className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest text-xs flex items-center justify-center gap-2"
-                        >
-                            <LogIn size={16} /> Connect
-                        </button>
+                            className="w-full !py-4 !text-xs !font-bold !uppercase !tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
                      </div>
                  </div>
             </motion.div>
@@ -184,13 +186,14 @@ const CoopDashboard: React.FC<Props> = ({ teams, onCreateTeam, onDeleteTeam, onJ
                             disabled={isCaptainOfAny}
                             className="w-full bg-black border border-zinc-800 rounded-xl px-6 py-4 text-white placeholder-zinc-700 focus:border-indigo-500/50 focus:outline-none text-lg transition-colors"
                         />
-                        <button 
+                        <SparkleButton
+                            text="Establish Link"
+                            size="md"
+                            hue={250}
                             onClick={handleCreateClick}
                             disabled={!createName || isCaptainOfAny}
-                            className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest text-xs flex items-center justify-center gap-2"
-                        >
-                            <Plus size={16} /> Establish Link
-                        </button>
+                            className="w-full !py-4 !text-xs !font-bold !uppercase !tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
                      </div>
                  </div>
             </motion.div>
@@ -203,7 +206,7 @@ const CoopDashboard: React.FC<Props> = ({ teams, onCreateTeam, onDeleteTeam, onJ
     if (!activeTeam) return null;
 
     const activeMembers = activeTeam.members.filter(m => m.status === 'online').length;
-    const raidStatus = activeMembers >= 2 ? 'Ready' : 'Locked';
+    const raidStatus = activeMembers >= 1 ? 'Ready' : 'Locked';
     const isCaptain = !!activeTeam.members.find(m => m.uid === currentUserId && m.role === 'Captain');
 
     return (
@@ -251,7 +254,7 @@ const CoopDashboard: React.FC<Props> = ({ teams, onCreateTeam, onDeleteTeam, onJ
                                 Raid Status
                             </div>
                             <div className={`text-2xl font-mono font-bold ${raidStatus === 'Ready' ? 'text-white' : 'text-zinc-500'}`}>
-                                {raidStatus === 'Ready' ? 'ACTIVE' : 'OFFLINE'}
+                                {raidStatus === 'Ready' ? (activeMembers === 1 ? 'SOLO' : 'ACTIVE') : 'OFFLINE'}
                             </div>
                         </div>
                         <div className="w-14 h-14 bg-black rounded-full flex items-center justify-center border border-zinc-800 relative">
@@ -263,13 +266,13 @@ const CoopDashboard: React.FC<Props> = ({ teams, onCreateTeam, onDeleteTeam, onJ
                     </div>
                     
                     {raidStatus === 'Ready' && (
-                        <button 
+                        <SparkleButton
+                            text="Deploy Squad"
+                            size="md"
+                            hue={0}
                             onClick={() => onEnterRaid(activeTeam)}
-                            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white text-black font-bold rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.2)] animate-pulse transition-all hover:scale-105 uppercase tracking-widest text-xs"
-                        >
-                            <Swords size={16} />
-                            Deploy Squad
-                        </button>
+                            className="w-full !px-6 !py-4 !font-bold !uppercase !tracking-widest !text-xs"
+                        />
                     )}
                 </div>
             </div>

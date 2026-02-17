@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CoopTeam, RaidData, RaidQuestion, UserState } from '../types';
 import { generateRaid } from '../services/gemini';
 import { Timer, Zap, Users, AlertTriangle, CheckCircle2, Shield, Crown, Swords, Loader2, ArrowRight, Heart, Skull, Activity, Radio, Lock } from 'lucide-react';
+import { SparkleButton } from '@chaidev/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -196,14 +197,14 @@ const RaidSession: React.FC<Props> = ({ team, currentUser, onExit }) => {
                             onChange={(e) => setRaidSubject(e.target.value)}
                             className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white focus:border-red-500 focus:outline-none transition-colors"
                         />
-                        <button 
+                        <SparkleButton
+                            text="Generate Raid"
+                            size="md"
+                            hue={0}
                             onClick={handleStartRaid}
                             disabled={!raidSubject}
-                            className="w-full py-5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-2xl shadow-[0_0_30px_rgba(220,38,38,0.3)] disabled:opacity-50 disabled:shadow-none transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs"
-                        >
-                            <AlertTriangle size={16} />
-                            Generate Raid
-                        </button>
+                            className="w-full !py-5 !rounded-2xl !font-bold !uppercase !tracking-widest !text-xs disabled:opacity-50 disabled:shadow-none"
+                        />
                          <button onClick={onExit} className="w-full text-xs text-zinc-500 hover:text-white mt-4 uppercase tracking-widest font-bold">Abort Mission</button>
                     </div>
                 ) : (
@@ -257,9 +258,13 @@ const RaidSession: React.FC<Props> = ({ team, currentUser, onExit }) => {
                       {logs.map((l, i) => <div key={i} className="mb-1">{l}</div>)}
                   </div>
 
-                  <button onClick={onExit} className="w-full px-8 py-4 bg-white text-black hover:bg-zinc-200 rounded-xl font-bold transition-colors uppercase tracking-widest text-xs">
-                      Return to Base
-                  </button>
+                  <SparkleButton
+                      text="Return to Base"
+                      size="md"
+                      hue={140}
+                      onClick={onExit}
+                      className="w-full !px-8 !py-4 !rounded-xl !font-bold !uppercase !tracking-widest !text-xs"
+                  />
               </div>
           </div>
        );

@@ -13,7 +13,12 @@ const INITIAL_USER_STATE: UserState = {
   completedNodes: [],
   currentFocus: null,
   quests: [],
-  lastQuestDate: ''
+  lastQuestDate: '',
+  aiSoul: {
+    soulPrompt: '',
+    memoryNotes: '',
+    helpStyle: 'Standard'
+  }
 };
 
 const generateDailyQuests = (): Quest[] => [

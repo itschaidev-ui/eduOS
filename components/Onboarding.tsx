@@ -33,20 +33,25 @@ const Onboarding: React.FC<Props> = ({ onComplete, onExit, initialName }) => {
   const [chatInput, setChatInput] = useState('');
   const [goalStage, setGoalStage] = useState<'ask_goal' | 'ask_clarify'>('ask_goal');
   const [chatLoading, setChatLoading] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [goalNotes, setGoalNotes] = useState(''); // raw user inputs
   const [missionDraft, setMissionDraft] = useState(''); // AI-interpreted mission
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>(() => {
     const greeting = initialName?.trim()
-      ? `Welcome back, ${initialName.trim()}. What do you want to learn?`
-      : `What do you want to learn?`;
+      ? `Hey ${initialName.trim()}! I'm Nova. What's up?`
+      : `Hey! I'm Nova. What's up?`;
     return [
       { role: 'ai', text: greeting },
-      { role: 'ai', text: `Be specific (e.g. “learn React fundamentals to build a portfolio app”).` }
     ];
   });
 
   useEffect(() => {
-    if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTo({
+        top: chatScrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }, [chatMessages]);
 
   const isGoodGoal = (text: string) => {
@@ -59,12 +64,157 @@ const Onboarding: React.FC<Props> = ({ onComplete, onExit, initialName }) => {
     return hasMeaningfulWord;
   };
 
-  const extractMissionDraft = (aiText: string) => {
-    // Expect model to include a line like: "MISSION: ...".
-    const lines = aiText.split('\n').map((l) => l.trim()).filter(Boolean);
-    const missionLine = lines.find((l) => /^MISSION(_DRAFT)?:/i.test(l));
-    if (!missionLine) return '';
-    return missionLine.replace(/^MISSION(_DRAFT)?:\s*/i, '').trim();
+  const extractMissionDraft = (aiText: string, userMessage?: string, fullConversation?: { role: 'user' | 'ai'; text: string }[]) => {
+    // Try to extract learning goal from natural conversation
+    // Look for patterns like "learn X", "want to learn", "goal is", etc.
+    const text = (aiText + ' ' + (userMessage || '')).toLowerCase();
+    
+    // Pattern 1: Direct mentions of learning goals in conversation
+    const learnPatterns = [
+      /(?:want to|wanna|going to|planning to|trying to|need to|want|wanted to|i want to)\s+learn\s+(?:how to\s+)?(?:make|create|build|do|use)\s+([^.!?]+)/i,
+      /learn\s+(?:how to\s+)?(?:make|create|build|do|use)\s+([^.!?]+?)(?:\s+to\s+|\s+for\s+|$)/i,
+      /goal\s+is\s+to\s+([^.!?]+)/i,
+      /(?:studying|learning|mastering|making|creating|building)\s+([^.!?]+)/i,
+      /focus\s+on\s+([^.!?]+)/i,
+      /(?:how to|how do you)\s+(?:make|create|build|do)\s+([^.!?]+)/i,
+      /(?:i want to|i wanna|i'd like to)\s+learn\s+(?:how to\s+)?(?:make|create|build|do)\s+([^.!?]+)/i,
+    ];
+    
+    // Check full conversation context for better extraction
+    const conversationText = fullConversation 
+      ? fullConversation.map(m => m.text).join(' ').toLowerCase()
+      : text;
+    
+    for (const pattern of learnPatterns) {
+      const match = conversationText.match(pattern);
+      if (match && match[1]) {
+        const extracted = match[1].trim();
+        // Filter out common filler words and validate it's meaningful
+        if (extracted.length > 5 && !extracted.match(/^(to|for|about|how|what|when|where|why|that|this|it)\s*$/i)) {
+          // Clean up the extracted text
+          const cleaned = extracted.replace(/^(to|for|about|how|what|when|where|why|that|this|it)\s+/i, '').trim();
+          if (cleaned.length > 5) {
+            return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+          }
+        }
+      }
+    }
+    
+    // Pattern 2: Look for AI's understanding/summary in recent messages - PRIORITY
+    const summaryPatterns = [
+      /(?:we're figuring out|we're working on|we're learning|figuring out|working on)\s+(?:how to\s+)?(?:make|create|build|do|use)\s+([^.!?,]+)/i,
+      /(?:so|so you|you want to|your goal is|you're looking to|you're trying to|you want|you'd like to)\s+(?:be taught|learn|to learn|to be taught)\s+(?:how to\s+)?(?:use|make|create|build|do)\s+([^.!?,]+)/i,
+      /(?:so|so you|you want to|your goal is|you're looking to|you're trying to|you want)\s+(?:learn\s+)?(?:how to\s+)?(?:make|create|build|do|learn|use)\s+([^.!?,]+)/i,
+      /(?:sounds like|looks like|seems like)\s+you\s+want\s+to\s+(?:learn\s+)?(?:how to\s+)?(?:make|create|build|do|use)\s+([^.!?,]+)/i,
+      /(?:help you|helping you|we can|we'll)\s+(?:learn\s+)?(?:how to\s+)?(?:make|create|build|do|use)\s+([^.!?,]+)/i,
+      /(?:you'd like to|you want to)\s+(?:be taught|learn)\s+(?:how to\s+)?(?:use|make)\s+([^.!?]+)/i,
+      /(?:start with|learn|basics of|fundamentals of)\s+([^.!?,]+?)(?:\s+to\s+make|\s+production|\s+software|$)/i,
+      /(?:phonk|react|python|javascript|guitar|piano|drawing|design|coding|programming|music|production|editing|video|photo|writing|language)\s+(?:production|development|design|editing|basics|fundamentals)/i,
+    ];
+    
+    // Check AI's last few messages for mission understanding - this is most reliable
+    if (fullConversation) {
+      const aiMessages = fullConversation.filter(m => m.role === 'ai').slice(-5);
+      for (const aiMsg of aiMessages) {
+        // First check for "basics of X" or "X production" patterns
+        const basicsPattern = /(?:basics of|fundamentals of|start with)\s+([^.!?,]+?)(?:\s+to\s+make|\s+production|\s+software|$)/i;
+        const basicsMatch = aiMsg.text.match(basicsPattern);
+        if (basicsMatch && basicsMatch[1]) {
+          const extracted = basicsMatch[1].trim();
+          if (extracted.length > 3) {
+            // If it mentions "phonk production" or similar, include that
+            if (aiMsg.text.toLowerCase().includes('phonk production')) {
+              return 'Phonk production';
+            }
+            return extracted.charAt(0).toUpperCase() + extracted.slice(1);
+          }
+        }
+        
+        // Check for "we're figuring out how to make X" pattern specifically (most reliable)
+        const figuringOutPattern = /(?:we're figuring out|we're working on|okay,?\s+so\s+we're figuring out)\s+(?:how to\s+)?(?:make|create|build|do|use|learn)\s+([^.!?,]+)/i;
+        const figuringOutMatch = aiMsg.text.match(figuringOutPattern);
+        if (figuringOutMatch && figuringOutMatch[1]) {
+          let extracted = figuringOutMatch[1].trim();
+          // Clean up common trailing words but keep meaningful ones
+          extracted = extracted.replace(/\s+(thing|stuff|that|this|it|oh nice|nice)$/i, '').trim();
+          if (extracted.length > 3) {
+            return extracted.charAt(0).toUpperCase() + extracted.slice(1);
+          }
+        }
+        
+        // Then check other summary patterns
+        for (const pattern of summaryPatterns) {
+          const match = aiMsg.text.match(pattern);
+          if (match && match[1]) {
+            let extracted = match[1].trim();
+            // Clean up filler words like "oh nice" that might get captured
+            extracted = extracted.replace(/\s+(oh nice|nice|yeah|yep|sure|ok|okay)$/i, '').trim();
+            // Handle "use X to make Y" patterns - keep the full phrase
+            if (extracted.includes(' to make ') || extracted.includes(' to create ')) {
+              // Keep the full phrase like "Waveform 13 to make phonk music"
+              const fullPhrase = extracted;
+              if (fullPhrase.length > 5) {
+                return fullPhrase.charAt(0).toUpperCase() + fullPhrase.slice(1);
+              }
+            }
+            // Only clean up if it's clearly a filler word, keep meaningful phrases like "phonk music"
+            const cleaned = extracted.replace(/\s+(thing|stuff|that|this|it)$/i, '').trim();
+            // Keep phrases that include genre/type words (music, song, etc.) as they're meaningful
+            if (cleaned.length > 2) {
+              return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+            }
+          }
+        }
+      }
+    }
+    
+    // Pattern 3: Look for "make X" or "create X" directly in conversation
+    const directActionPatterns = [
+      /(?:make|create|build|do)\s+([^.!?]+?)(?:\s+music|\s+song|\s+track|\s+beat|$)/i,
+    ];
+    
+    if (fullConversation) {
+      const allText = fullConversation.map(m => m.text).join(' ').toLowerCase();
+      for (const pattern of directActionPatterns) {
+        const match = allText.match(pattern);
+        if (match && match[1]) {
+          const extracted = match[1].trim();
+          if (extracted.length > 3 && !extracted.match(/^(that|this|it|stuff|things)\s*$/i)) {
+            return extracted.charAt(0).toUpperCase() + extracted.slice(1);
+          }
+        }
+      }
+    }
+    
+    // Pattern 4: If user message itself is a learning goal
+    if (userMessage && isGoodGoal(userMessage)) {
+      return userMessage;
+    }
+    
+    // Pattern 5: Fallback - look for topic mentioned in conversation (e.g., "phonk", "music production")
+    if (fullConversation) {
+      const allText = fullConversation.map(m => m.text).join(' ').toLowerCase();
+      // Look for common learning topics mentioned
+      const topicPatterns = [
+        /(?:phonk|react|python|javascript|guitar|piano|drawing|design|coding|programming|music|production|editing|video|photo|writing|language)/i
+      ];
+      
+      // Also check if AI explicitly mentions what they're learning
+      const explicitLearningPattern = /(?:learning|figuring out|working on|making|creating)\s+([^.!?,]+?)(?:\s+music|\s+production|\s+software|$)/i;
+      const explicitMatch = allText.match(explicitLearningPattern);
+      if (explicitMatch && explicitMatch[1]) {
+        const topic = explicitMatch[1].trim();
+        if (topic.length > 2 && !topic.match(/^(how|what|when|where|why|to|for|about|that|this|it|stuff|things)\s*$/i)) {
+          // If it's a short topic, add context
+          if (topic.length < 10 && allText.includes('music')) {
+            return `Make ${topic} music`;
+          }
+          return topic.charAt(0).toUpperCase() + topic.slice(1);
+        }
+      }
+    }
+    
+    return '';
   };
 
   const sendGoalMessage = async () => {
@@ -108,24 +258,93 @@ const Onboarding: React.FC<Props> = ({ onComplete, onExit, initialName }) => {
     }));
 
     setChatLoading(true);
+    setIsTyping(true);
     try {
-      setChatMessages((prev) => [...prev, { role: 'user', text }]);
+      const updatedMessages = [...chatMessages, { role: 'user' as const, text }];
+      setChatMessages(updatedMessages);
+      
       const reply = await chatWithOnboardingAI(history, text, { currentGoal: nextGoalForContext });
       const replyText = reply || '…';
-      setChatMessages((prev) => [...prev, { role: 'ai', text: replyText }]);
+      // Small delay for better UX - makes response feel more natural
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const finalMessages = [...updatedMessages, { role: 'ai' as const, text: replyText }];
+      setChatMessages(finalMessages);
+      setIsTyping(false);
 
-      const extracted = extractMissionDraft(replyText);
+      // Extract mission naturally from conversation using full context
+      const extracted = extractMissionDraft(replyText, text, finalMessages);
       if (extracted) {
         setMissionDraft(extracted);
-        // Use the AI mission as the canonical goal for curriculum generation
+        // Use the extracted goal for curriculum generation
         setFormData((prev) => ({ ...prev, goal: extracted }));
+      } else if (isGoodGoal(text)) {
+        // If user message itself is a good goal, use it directly
+        setMissionDraft(text);
+        setFormData((prev) => ({ ...prev, goal: text }));
+      }
+
+      // Check if user confirmed they want to learn (sure, yes, okay, etc.)
+      const confirmationPatterns = /^(sure|yes|yeah|yep|ok|okay|alright|sounds good|let's do it|let's go|i'd like that|i want to|i'm interested|thanks|thank you|ok thanks)$/i;
+      const isConfirmation = confirmationPatterns.test(text.trim().toLowerCase());
+      
+      // Check if mission was successfully extracted (not generic like "do that")
+      const hasClearMission = extracted && 
+                              extracted.length > 3 && 
+                              !extracted.toLowerCase().match(/^(do|that|this|it|stuff|things)$/i) &&
+                              extracted.toLowerCase() !== 'do that';
+      
+      // Check if mission was just extracted in this turn (strong signal)
+      const missionJustExtracted = hasClearMission && extracted;
+      
+      // Auto-advance if: mission is extracted AND (user confirmed OR we're past initial goal stage OR AI indicates readiness)
+      const aiIndicatesReady = replyText.toLowerCase().includes('so we') || 
+                               replyText.toLowerCase().includes('we\'re figuring out') ||
+                               replyText.toLowerCase().includes('we\'re working on') ||
+                               replyText.toLowerCase().includes('okay, so') ||
+                               replyText.toLowerCase().includes('so you') ||
+                               replyText.toLowerCase().includes('you\'d like to') ||
+                               replyText.toLowerCase().includes('you want to') ||
+                               /okay,?\s+so\s+we\'re/i.test(replyText.toLowerCase()) ||
+                               (goalStage === 'ask_clarify' && hasClearMission);
+      
+      // Check if AI clearly stated the mission in a question/statement format (e.g., "So you'd like to be taught...?")
+      // This is a strong signal that we have enough information - AI is summarizing/confirming the mission
+      const aiStatesMission = (/(?:so|so you|you'd like to|you want to)\s+(?:be taught|learn|to learn)/i.test(replyText) ||
+                               /(?:so you'd like|so you want)\s+to\s+(?:be taught|learn)/i.test(replyText) ||
+                               /(?:gotcha|makes sense|okay|alright).*?(?:so you|you'd like|you want)/i.test(replyText)) &&
+                               hasClearMission;
+      
+      // Auto-advance conditions:
+      // 1. Clear mission extracted AND user confirmed, OR
+      // 2. Clear mission extracted AND we're past initial stage, OR  
+      // 3. Clear mission extracted AND AI indicates we're ready, OR
+      // 4. AI clearly states the mission in a question/statement format
+      // 5. User confirmed AND we have any mission (even if not perfect extraction)
+      const hasAnyMission = (extracted && extracted.length > 3) || missionDraft.trim().length > 3;
+      // Also check if AI said "we're figuring out" which is a strong signal
+      const aiSaidFiguringOut = replyText.toLowerCase().includes('we\'re figuring out') || 
+                                 replyText.toLowerCase().includes('okay, so we\'re figuring out');
+      
+      const shouldAutoAdvance = (hasClearMission || (hasAnyMission && isConfirmation)) && 
+                                 (isConfirmation || goalStage === 'ask_clarify' || aiIndicatesReady || aiStatesMission || aiSaidFiguringOut || (isConfirmation && hasAnyMission)) && 
+                                 currentStep === 1;
+      
+      if (shouldAutoAdvance) {
+        // Small delay before auto-advancing for better UX
+        setTimeout(() => {
+          setCurrentStep(2);
+        }, 1500);
       }
     } catch (e: any) {
-      console.error('[Onboarding] Gemini chat failed:', e);
+      if (import.meta.env?.MODE === 'development') {
+        console.error('[Onboarding] Gemini chat failed:', e);
+      }
       setChatMessages((prev) => [
         ...prev,
-        { role: 'ai', text: `Gemini error: ${e?.message || String(e)}` }
+        { role: 'ai', text: `I'm having trouble connecting right now. Please try again.` }
       ]);
+      setIsTyping(false);
     } finally {
       setChatLoading(false);
     }
@@ -221,72 +440,151 @@ const Onboarding: React.FC<Props> = ({ onComplete, onExit, initialName }) => {
               }
             }}
           >
-            {/* STEP 1: Conversational Goal (Chat) */}
+            {/* STEP 1: Conversational Goal (Chat) - Fully Merged */}
             <Step>
-              <div className="space-y-6 py-4">
-                <div className="space-y-4 text-center">
-                  <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10 shadow-lg shadow-cyan-500/10 mx-auto mb-4">
-                    <Target size={32} className="text-cyan-400" />
-                  </div>
-                  <h2 className="text-4xl font-bold text-white tracking-tight">Mission Objective</h2>
-                  <p className="text-zinc-400 text-lg leading-relaxed max-w-lg mx-auto">
+              <div className="flex flex-col h-full min-h-[70vh] w-full">
+                {/* Compact Header */}
+                <div className="text-center mb-6 shrink-0">
+                  <h2 className="text-3xl font-bold text-white tracking-tight mb-2">Mission Objective</h2>
+                  <p className="text-zinc-400 text-sm">
                     Talk it out. When we’re aligned, hit <span className="text-white font-bold">CONTINUE</span>.
                   </p>
                 </div>
 
-                <div className="max-w-2xl mx-auto bg-zinc-950/60 border border-white/10 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-xl">
-                  <div ref={chatScrollRef} className="h-[320px] overflow-y-auto p-5 space-y-4 custom-scrollbar">
-                    {chatMessages.map((m, i) => (
-                      <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                        {m.role === 'user' ? (
-                          <div className="w-9 h-9 rounded-2xl flex items-center justify-center border shadow-lg bg-white/5 border-white/10 text-white/70">
-                            <User size={14} />
-                          </div>
-                        ) : (
+                {/* Chat Interface - IS the step, no card wrapper */}
+                <div className="flex-1 flex flex-col w-full max-w-4xl mx-auto min-h-0">
+                  {/* Chat Messages Area */}
+                  <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-6 py-8 space-y-5 custom-scrollbar min-h-0 scroll-smooth" style={{ maxHeight: 'calc(70vh - 140px)' }}>
+                    <AnimatePresence mode="popLayout">
+                      {chatMessages.map((m, i) => (
+                        <motion.div
+                          key={`${i}-${m.text.substring(0, 10)}`}
+                          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                          className={`flex gap-3 items-start ${m.role === 'user' ? 'flex-row-reverse' : ''}`}
+                        >
+                          {m.role === 'user' ? (
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+                              className="w-8 h-8 rounded-full flex items-center justify-center border shadow-lg bg-white/10 border-white/20 text-white shrink-0"
+                            >
+                              <User size={14} />
+                            </motion.div>
+                          ) : (
+                            <motion.div
+                              initial={{ scale: 0, rotate: -90 }}
+                              animate={{ scale: 1, rotate: 0 }}
+                              whileHover={{ scale: 1.05 }}
+                              transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+                              className="shrink-0"
+                            >
+                              <CompanionAvatar
+                                size={32}
+                                alt="Companion"
+                                className="shadow-lg"
+                                objectPosition="center 12%"
+                              />
+                            </motion.div>
+                          )}
+                          <motion.div
+                            initial={{ opacity: 0, x: m.role === 'user' ? 20 : -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.15, duration: 0.3 }}
+                            className={`max-w-[80%] whitespace-pre-wrap text-sm leading-relaxed rounded-2xl px-4 py-3 shadow-sm ${
+                              m.role === 'user'
+                                ? 'bg-gradient-to-br from-white/10 to-white/5 border border-white/20 text-white rounded-tr-sm backdrop-blur-sm'
+                                : 'bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 text-zinc-200 rounded-tl-sm backdrop-blur-sm'
+                            }`}
+                          >
+                            {m.text}
+                          </motion.div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                    {chatLoading && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="flex gap-3 items-start"
+                      >
+                        <div className="shrink-0">
                           <CompanionAvatar
-                            size={36}
+                            size={32}
                             alt="Companion"
-                            className="shadow-lg"
+                            className="shadow-lg opacity-60"
                             objectPosition="center 12%"
                           />
-                        )}
-                        <div
-                          className={`max-w-[85%] whitespace-pre-wrap text-sm leading-relaxed rounded-2xl px-4 py-3 border ${
-                            m.role === 'user'
-                              ? 'bg-white/5 border-white/10 text-white rounded-tr-md'
-                              : 'bg-zinc-900/40 border-white/5 text-zinc-200 rounded-tl-md'
-                          }`}
-                        >
-                          {m.text}
                         </div>
-                      </div>
-                    ))}
+                        <div className="bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 rounded-2xl rounded-tl-sm px-4 py-3 backdrop-blur-sm shadow-sm w-64 relative overflow-hidden">
+                          {/* Skeleton bars */}
+                          <div className="space-y-2">
+                            <div className="h-3 bg-zinc-700/50 rounded-full w-full relative overflow-hidden">
+                              <motion.div
+                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                                animate={{ x: ['-100%', '100%'] }}
+                                transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
+                              />
+                            </div>
+                            <div className="h-3 bg-zinc-700/50 rounded-full w-3/4 relative overflow-hidden">
+                              <motion.div
+                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                                animate={{ x: ['-100%', '100%'] }}
+                                transition={{ repeat: Infinity, duration: 1.5, ease: 'linear', delay: 0.2 }}
+                              />
+                            </div>
+                            <div className="h-3 bg-zinc-700/50 rounded-full w-5/6 relative overflow-hidden">
+                              <motion.div
+                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                                animate={{ x: ['-100%', '100%'] }}
+                                transition={{ repeat: Infinity, duration: 1.5, ease: 'linear', delay: 0.4 }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
 
-                  <div className="p-5 border-t border-white/5">
-                    <div className="relative">
+                  {/* Input Area - Fixed at bottom */}
+                  <div className="px-6 py-5 border-t border-white/5 shrink-0 bg-gradient-to-t from-black/40 to-transparent">
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="relative"
+                    >
                       <input
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && sendGoalMessage()}
+                        onKeyDown={(e) => e.key === 'Enter' && !chatLoading && sendGoalMessage()}
                         disabled={loading || chatLoading}
                         placeholder="Tell me exactly what you want to learn…"
-                        className="w-full bg-black/40 border border-white/10 rounded-2xl pl-4 pr-12 py-4 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-cyan-500/40 transition-all"
+                        className="w-full bg-black/60 border border-white/10 rounded-2xl pl-4 pr-12 py-4 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500/50 focus:bg-black/80 focus:ring-2 focus:ring-cyan-500/20 transition-all shadow-lg"
                         autoFocus
                       />
-                      <button
+                      <motion.button
                         onClick={sendGoalMessage}
                         disabled={loading || chatLoading || !chatInput.trim()}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl bg-white text-black hover:bg-zinc-200 disabled:opacity-30 transition-all flex items-center justify-center"
+                        whileHover={{ scale: chatInput.trim() && !chatLoading ? 1.05 : 1 }}
+                        whileTap={{ scale: chatInput.trim() && !chatLoading ? 0.95 : 1 }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-xl bg-white text-black hover:bg-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center shadow-lg"
                         title="Send"
                       >
                         <Send size={14} />
-                      </button>
-                    </div>
+                      </motion.button>
+                    </motion.div>
                     {formData.goal.trim() && (
-                      <div className="mt-3 text-[10px] font-mono text-zinc-500 uppercase tracking-widest text-center">
-                        AI_MISSION: <span className="text-zinc-300 normal-case">{missionDraft || formData.goal}</span>
-                      </div>
+                      <motion.div
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-3 text-[10px] font-mono text-zinc-500 uppercase tracking-widest text-center"
+                      >
+                        AI_MISSION: <span className="text-cyan-400 normal-case font-semibold">{missionDraft || formData.goal}</span>
+                      </motion.div>
                     )}
                   </div>
                 </div>

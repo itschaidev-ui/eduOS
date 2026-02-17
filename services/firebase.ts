@@ -133,9 +133,11 @@ export const signInWithGoogle = async () => {
     if (error.code) {
       console.error('   Error code:', error.code);
       if (error.code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'your-deployed-domain';
         console.error('   ⚠️ CRITICAL: Domain not authorized in Firebase!');
-        console.error('   Solution: Go to Firebase Console → Authentication → Settings → Authorized domains');
-        console.error('   Add: eduos.chaimode.dev');
+        console.error('   Solution: Firebase Console → Authentication → Settings → Authorized domains');
+        console.error('   Add this domain:', host);
+        console.error('   See ENV_SETUP.md section "Firebase Auth: Fix Sign-in on Deployed Site"');
       } else if (error.code === 'auth/operation-not-allowed') {
         console.error('   ⚠️ Google sign-in method not enabled!');
         console.error('   Solution: Go to Firebase Console → Authentication → Sign-in method → Enable Google');
@@ -194,7 +196,8 @@ export const checkRedirectResult = async () => {
     if (error.code) {
       console.error('   Error code:', error.code);
       if (error.code === 'auth/unauthorized-domain') {
-        console.error('   ⚠️ Domain not authorized! Add eduos.chaimode.dev to Firebase authorized domains.');
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'your-deployed-domain';
+        console.error('   ⚠️ Domain not authorized! Add', host, 'to Firebase Console → Authentication → Authorized domains.');
       }
     }
     if (error.message) {
